@@ -3,6 +3,30 @@ import Foundation
 import UserNotifications
 
 @MainActor
+protocol RefreshScheduling: AnyObject {
+    func schedule(every interval: TimeInterval, action: @escaping @MainActor () async -> Void)
+    func invalidate()
+}
+
+@MainActor
+final class TimerRefreshScheduler: RefreshScheduling {
+    private var timer: Timer?
+
+    func schedule(every interval: TimeInterval, action: @escaping @MainActor () async -> Void) {
+        invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { _ in
+            Task { @MainActor in await action() }
+        }
+        timer?.tolerance = min(15, interval * 0.1)
+    }
+
+    func invalidate() {
+        timer?.invalidate()
+        timer = nil
+    }
+}
+
+@MainActor
 final class UsageRefreshService: ObservableObject {
     @Published private(set) var usage = CodexUsage.unavailable()
     @Published private(set) var isRefreshing = false
@@ -12,16 +36,18 @@ final class UsageRefreshService: ObservableObject {
 
     private let provider: any CodexUsageProviding
     private let detector: CodexDetector
-    private var refreshTimer: Timer?
+    private let scheduler: any RefreshScheduling
     private var hasStarted = false
     private var previousUsage: CodexUsage?
 
     init(
         provider: any CodexUsageProviding = CodexAppServerUsageProvider(),
-        detector: CodexDetector = CodexDetector()
+        detector: CodexDetector = CodexDetector(),
+        scheduler: (any RefreshScheduling)? = nil
     ) {
         self.provider = provider
         self.detector = detector
+        self.scheduler = scheduler ?? TimerRefreshScheduler()
         UserDefaults.standard.register(defaults: [
             SettingsKey.menuBarSelection: UsageSelection.fiveHour.rawValue,
             SettingsKey.dockBadgeSelection: DockBadgeSelection.fiveHour.rawValue,
@@ -75,16 +101,12 @@ final class UsageRefreshService: ObservableObject {
     }
 
     func reschedule() {
-        refreshTimer?.invalidate()
+        scheduler.invalidate()
         let seconds = UserDefaults.standard.integer(forKey: SettingsKey.refreshInterval)
         let interval = RefreshInterval(rawValue: seconds) ?? .fiveMinutes
-        refreshTimer = Timer.scheduledTimer(withTimeInterval: TimeInterval(interval.rawValue), repeats: true) {
-            [weak self] _ in
-            Task { @MainActor [weak self] in
-                await self?.refresh()
-            }
+        scheduler.schedule(every: TimeInterval(interval.rawValue)) { [weak self] in
+            await self?.refresh()
         }
-        refreshTimer?.tolerance = min(15, TimeInterval(interval.rawValue) * 0.1)
     }
 
     private func updateDockBadge() {
@@ -124,4 +146,3 @@ final class UsageRefreshService: ObservableObject {
         UNUserNotificationCenter.current().add(request)
     }
 }
-

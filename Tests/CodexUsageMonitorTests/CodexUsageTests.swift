@@ -189,6 +189,65 @@ final class CodexUsageTests: XCTestCase {
         XCTAssertFalse(service.isRefreshing)
     }
 
+    @MainActor
+    func testScheduledRefreshUsesPersistedIntervalAndFetchesUsage() async {
+        let defaults = UserDefaults.standard
+        let previousInterval = defaults.object(forKey: SettingsKey.refreshInterval)
+        defer {
+            if let previousInterval {
+                defaults.set(previousInterval, forKey: SettingsKey.refreshInterval)
+            } else {
+                defaults.removeObject(forKey: SettingsKey.refreshInterval)
+            }
+        }
+        defaults.set(RefreshInterval.oneMinute.rawValue, forKey: SettingsKey.refreshInterval)
+
+        let expected = CodexUsage(
+            fiveHourRemainingPercent: 64,
+            weeklyRemainingPercent: 37,
+            fiveHourResetDate: nil,
+            weeklyResetDate: nil,
+            lastUpdated: Date(),
+            source: "Scheduled fixture"
+        )
+        let scheduler = ManualRefreshScheduler()
+        let service = UsageRefreshService(provider: FixedProvider(usage: expected), scheduler: scheduler)
+
+        service.reschedule()
+        XCTAssertEqual(scheduler.interval, 60)
+        await scheduler.fire()
+
+        XCTAssertEqual(service.usage, expected)
+    }
+
+    @MainActor
+    func testMenuBarSelectionPersistsThroughUserDefaults() async {
+        let defaults = UserDefaults.standard
+        let previousSelection = defaults.object(forKey: SettingsKey.menuBarSelection)
+        defer {
+            if let previousSelection {
+                defaults.set(previousSelection, forKey: SettingsKey.menuBarSelection)
+            } else {
+                defaults.removeObject(forKey: SettingsKey.menuBarSelection)
+            }
+        }
+
+        defaults.set(UsageSelection.weekly.rawValue, forKey: SettingsKey.menuBarSelection)
+        let usage = CodexUsage(
+            fiveHourRemainingPercent: 75,
+            weeklyRemainingPercent: 34,
+            fiveHourResetDate: nil,
+            weeklyResetDate: nil,
+            lastUpdated: Date(),
+            source: "Settings fixture"
+        )
+        let service = UsageRefreshService(provider: FixedProvider(usage: usage))
+        await service.refresh()
+
+        XCTAssertEqual(defaults.string(forKey: SettingsKey.menuBarSelection), UsageSelection.weekly.rawValue)
+        XCTAssertEqual(service.menuBarText, "34%")
+    }
+
     func testLiveCodexProviderWhenExplicitlyEnabled() async throws {
         guard ProcessInfo.processInfo.environment["CODEX_LIVE_TEST"] == "1" else {
             throw XCTSkip("Set CODEX_LIVE_TEST=1 to query the installed Codex app-server.")
@@ -213,5 +272,25 @@ private struct FixedProvider: CodexUsageProviding {
 private struct FailingProvider: CodexUsageProviding {
     func fetchUsage() async throws -> CodexUsage {
         throw CodexUsageError.serverUnavailable
+    }
+}
+
+@MainActor
+private final class ManualRefreshScheduler: RefreshScheduling {
+    private(set) var interval: TimeInterval?
+    private var action: (@MainActor () async -> Void)?
+
+    func schedule(every interval: TimeInterval, action: @escaping @MainActor () async -> Void) {
+        self.interval = interval
+        self.action = action
+    }
+
+    func invalidate() {
+        interval = nil
+        action = nil
+    }
+
+    func fire() async {
+        await action?()
     }
 }
