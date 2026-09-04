@@ -12,6 +12,10 @@ A lightweight, native macOS menu-bar app that shows the percentage of Codex capa
 
 The app never estimates a token allowance. All primary quota displays are percentages.
 
+## Reference review
+
+The public behavior of [burakereno/codex-monitor](https://github.com/burakereno/codex-monitor) was reviewed as requested: native menu-bar presentation, popover interaction, Dock badge behavior, manual refresh, and its Codex app-server data flow. At the time of review the reference repository did not contain a `LICENSE` or `COPYING` file and GitHub did not declare a license. This project therefore uses only those public behavioral ideas and contains an independent implementation; no reference source code was copied.
+
 ## Data source and privacy
 
 The app launches the installed Codex CLI's structured app-server protocol and calls the official `account/rateLimits/read` method. Codex labels each window as `usedPercent`; this app validates that the value is finite and between 0 and 100, then displays `100 - usedPercent` as remaining.
@@ -52,4 +56,3 @@ Sources/CodexUsageMonitor/
 ## Failure behavior
 
 Unavailable or invalid values display as `--%` or `Unavailable`. The app does not guess when Codex is missing, unauthenticated, offline, returns an unsupported window, or reports an invalid percentage.
-
