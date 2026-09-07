@@ -129,7 +129,7 @@ final class CodexUsageTests: XCTestCase {
         XCTAssertEqual(UsageLevel(remainingPercent: 0), .critical)
     }
 
-    func testAllDisplayModesUseRemainingPercentages() {
+    func testAllDockDisplayModesUseRemainingPercentages() {
         let usage = CodexUsage(
             fiveHourRemainingPercent: 83,
             weeklyRemainingPercent: 42,
@@ -139,15 +139,25 @@ final class CodexUsageTests: XCTestCase {
             source: "Test"
         )
 
-        XCTAssertEqual(UsageSelection.fiveHour.value(in: usage), 83)
-        XCTAssertEqual(UsageSelection.weekly.value(in: usage), 42)
-        XCTAssertEqual(UsageSelection.lowest.value(in: usage), 42)
+        XCTAssertEqual(DockBadgeSelection.fiveHour.value(in: usage), 83)
+        XCTAssertEqual(DockBadgeSelection.weekly.value(in: usage), 42)
         XCTAssertEqual(DockBadgeSelection.lowest.value(in: usage), 42)
         XCTAssertNil(DockBadgeSelection.disabled.value(in: usage))
     }
 
     @MainActor
     func testDockBadgeUsesPercentageOrCanBeDisabled() {
+        let defaults = UserDefaults.standard
+        let previousShowInDock = defaults.object(forKey: SettingsKey.showInDock)
+        defer {
+            if let previousShowInDock {
+                defaults.set(previousShowInDock, forKey: SettingsKey.showInDock)
+            } else {
+                defaults.removeObject(forKey: SettingsKey.showInDock)
+            }
+        }
+        SettingsKey.registerDefaults()
+        defaults.set(true, forKey: SettingsKey.showInDock)
         _ = NSApplication.shared
         DockBadgeManager.update(value: 83, isEnabled: true)
         XCTAssertEqual(NSApp.dockTile.badgeLabel, "83%")
@@ -221,18 +231,25 @@ final class CodexUsageTests: XCTestCase {
     }
 
     @MainActor
-    func testMenuBarSelectionPersistsThroughUserDefaults() async {
+    func testDockSelectionPersistsThroughUserDefaults() async {
         let defaults = UserDefaults.standard
-        let previousSelection = defaults.object(forKey: SettingsKey.menuBarSelection)
+        let previousSelection = defaults.object(forKey: SettingsKey.dockBadgeSelection)
+        let previousShowInDock = defaults.object(forKey: SettingsKey.showInDock)
         defer {
             if let previousSelection {
-                defaults.set(previousSelection, forKey: SettingsKey.menuBarSelection)
+                defaults.set(previousSelection, forKey: SettingsKey.dockBadgeSelection)
             } else {
-                defaults.removeObject(forKey: SettingsKey.menuBarSelection)
+                defaults.removeObject(forKey: SettingsKey.dockBadgeSelection)
+            }
+            if let previousShowInDock {
+                defaults.set(previousShowInDock, forKey: SettingsKey.showInDock)
+            } else {
+                defaults.removeObject(forKey: SettingsKey.showInDock)
             }
         }
 
-        defaults.set(UsageSelection.weekly.rawValue, forKey: SettingsKey.menuBarSelection)
+        defaults.set(true, forKey: SettingsKey.showInDock)
+        defaults.set(DockBadgeSelection.weekly.rawValue, forKey: SettingsKey.dockBadgeSelection)
         let usage = CodexUsage(
             fiveHourRemainingPercent: 75,
             weeklyRemainingPercent: 34,
@@ -244,8 +261,73 @@ final class CodexUsageTests: XCTestCase {
         let service = UsageRefreshService(provider: FixedProvider(usage: usage))
         await service.refresh()
 
-        XCTAssertEqual(defaults.string(forKey: SettingsKey.menuBarSelection), UsageSelection.weekly.rawValue)
-        XCTAssertEqual(service.menuBarText, "34%")
+        XCTAssertEqual(
+            defaults.string(forKey: SettingsKey.dockBadgeSelection),
+            DockBadgeSelection.weekly.rawValue
+        )
+        XCTAssertEqual(NSApplication.shared.dockTile.badgeLabel, "34%")
+    }
+
+    @MainActor
+    func testDockVisibilitySwitchesActivationPolicyAtRuntime() {
+        let defaults = UserDefaults.standard
+        let previousShowInDock = defaults.object(forKey: SettingsKey.showInDock)
+        let visibility = AppVisibilityController.shared
+        defer {
+            let restored = (previousShowInDock as? Bool) ?? true
+            defaults.set(restored, forKey: SettingsKey.showInDock)
+            visibility.setDockVisibility(restored, reopenWindow: false)
+        }
+
+        visibility.setDockVisibility(false, reopenWindow: false)
+        XCTAssertEqual(NSApplication.shared.activationPolicy(), .accessory)
+        XCTAssertNil(NSApplication.shared.dockTile.badgeLabel)
+        XCTAssertEqual(visibility.activationPolicyStatus, "Accessory — Dock hidden")
+
+        visibility.setDockVisibility(true, reopenWindow: false)
+        XCTAssertEqual(NSApplication.shared.activationPolicy(), .regular)
+        visibility.setDockVisibility(true, reopenWindow: false)
+        XCTAssertEqual(visibility.activationPolicyStatus, "Regular — Dock visible")
+    }
+
+    @MainActor
+    func testClosedMainWindowCanBeReopened() {
+        let service = UsageRefreshService(provider: FixedProvider(usage: .unavailable(source: "Test")))
+        let visibility = AppVisibilityController.shared
+        visibility.configure(refreshService: service)
+        visibility.reopenMainWindow()
+
+        let window = NSApplication.shared.windows.first {
+            $0.identifier?.rawValue == "CodexUsageMainWindow"
+        }
+        XCTAssertNotNil(window)
+        XCTAssertTrue(window?.isVisible == true)
+
+        window?.close()
+        XCTAssertFalse(window?.isVisible == true)
+        visibility.reopenMainWindow()
+        XCTAssertTrue(window?.isVisible == true)
+        window?.close()
+    }
+
+    @MainActor
+    func testWindowClosePolicyUsesPersistedSetting() {
+        let defaults = UserDefaults.standard
+        let previousValue = defaults.object(forKey: SettingsKey.keepRunningWhenWindowClosed)
+        defer {
+            if let previousValue {
+                defaults.set(previousValue, forKey: SettingsKey.keepRunningWhenWindowClosed)
+            } else {
+                defaults.removeObject(forKey: SettingsKey.keepRunningWhenWindowClosed)
+            }
+        }
+        let delegate = AppDelegate()
+
+        defaults.set(true, forKey: SettingsKey.keepRunningWhenWindowClosed)
+        XCTAssertFalse(delegate.applicationShouldTerminateAfterLastWindowClosed(.shared))
+
+        defaults.set(false, forKey: SettingsKey.keepRunningWhenWindowClosed)
+        XCTAssertTrue(delegate.applicationShouldTerminateAfterLastWindowClosed(.shared))
     }
 
     func testLiveCodexProviderWhenExplicitlyEnabled() async throws {
