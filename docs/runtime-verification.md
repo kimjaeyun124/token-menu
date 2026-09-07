@@ -5,7 +5,7 @@ Environment: Apple Silicon, macOS 26.6.2, Codex CLI 0.153.4.
 | Check | Result and evidence |
 | --- | --- |
 | Release build | PASS. Main app and login helper built and passed strict nested signature verification. |
-| Tests | PASS. 21 tests, including the live Codex app-server test. |
+| Tests | PASS. 23 tests, including the live Codex app-server test and parser-level single-window cases. |
 | Runtime type / Dock | PASS. `lsappinfo` reported `ApplicationType=UIElement`; lifecycle state reported accessory policy and hidden Dock. |
 | Menu bar label | PASS. The running native status item changed from its neutral startup value to `5H 82%`, then `5H 81%` after Refresh. |
 | Status-item action | PASS. Runtime activation invoked the native status button action and displayed its popover. |
