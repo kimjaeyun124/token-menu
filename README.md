@@ -1,20 +1,22 @@
 # Codex Usage Monitor
 
-A lightweight, native macOS menu-bar app that shows the percentage of Codex capacity remaining in the current 5-hour and weekly windows.
+A lightweight, native macOS utility window that shows the percentage of Codex capacity remaining in the current 5-hour and weekly windows.
 
 ## What it shows
 
-- Menu bar: 5-hour, weekly, or lowest remaining percentage
+- Main window: 5-hour and weekly remaining percentages, reset times, status labels, and refresh
 - Dock badge: 5-hour, weekly, lowest remaining percentage, or off
-- Popover: both remaining percentages, reset times, status labels, last update, and refresh
+- Optional hidden-Dock background mode
+- Control–Option–C global shortcut for reopening the window
 - Optional notification when a limit crosses 50%, 20%, or 10% remaining
 - Optional launch at login
 
 The app never estimates a token allowance. All primary quota displays are percentages.
+It intentionally creates no `MenuBarExtra`, `NSStatusItem`, menu-bar icon, or menu-bar percentage.
 
 ## Reference review
 
-The public behavior of [burakereno/codex-monitor](https://github.com/burakereno/codex-monitor) was reviewed as requested: native menu-bar presentation, popover interaction, Dock badge behavior, manual refresh, and its Codex app-server data flow. At the time of review the reference repository did not contain a `LICENSE` or `COPYING` file and GitHub did not declare a license. This project therefore uses only those public behavioral ideas and contains an independent implementation; no reference source code was copied.
+The public behavior of [burakereno/codex-monitor](https://github.com/burakereno/codex-monitor) was reviewed as requested, including its Dock badge, manual refresh, and Codex app-server data flow. At the time of review the reference repository did not contain a `LICENSE` or `COPYING` file and GitHub did not declare a license. This project therefore uses only those public behavioral ideas and contains an independent implementation; no reference source code was copied.
 
 ## Data source and privacy
 
@@ -39,19 +41,34 @@ swift test
 open "dist/Codex Usage.app"
 ```
 
-The build script creates an ad-hoc-signed application at `dist/Codex Usage.app`. Launch at Login works from the packaged app, not from `swift run`.
+The build script creates an ad-hoc-signed application at `dist/Codex Usage.app`, including a bundled login helper. Launch at Login works from the packaged app installed in Applications, not from `swift run`.
+
+## Window and Dock behavior
+
+The app starts as a regular Dock application. Turning off **Show in Dock** switches to AppKit's accessory activation policy and removes the Dock badge without stopping refreshes. Closing the window keeps the process alive by default. Reopen it with Control–Option–C, Spotlight, Applications, or by launching the app again; macOS routes that reopen event to the existing process.
+
+When Launch at Login, hidden Dock, and keep-running mode are all enabled, the bundled `SMAppService` login helper opens the main app with a background flag so no window appears at login. The global shortcut and normal macOS reopen event remain available.
+
+If another application owns Control–Option–C, Settings reports that the shortcut is unavailable; launching the app again remains the recovery path. The shortcut can be disabled in Settings.
+
+## Verification
+
+See [runtime verification](docs/runtime-verification.md) for tested behavior and remaining manual checks. Lifecycle logs contain only visibility, shortcut registration, and refresh-completion events, with no account data or raw protocol responses.
 
 ## Architecture
 
 ```text
 Sources/CodexUsageMonitor/
-├── App/          SwiftUI application entry point
+├── App/          App delegate, application visibility, and SwiftUI entry point
 ├── Dock/         Native Dock badge updates
 ├── Models/       Explicit remaining-percentage models and settings
 ├── Services/     Codex detection, protocol client, parsing, refresh, notifications
-├── UI/           Menu-bar popover and settings
+├── Shortcuts/    Global Control–Option–C shortcut
+├── UI/           Main usage window and settings
 └── Utilities/    Process execution
 ```
+
+`Sources/CodexUsageLauncher/` contains the small bundled login-item helper.
 
 ## Failure behavior
 
