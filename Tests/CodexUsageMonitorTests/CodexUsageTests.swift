@@ -114,6 +114,28 @@ final class CodexUsageTests: XCTestCase {
         XCTAssertNil(usage.weeklyResetDate)
     }
 
+    func testParserPreservesWeeklyWhenFiveHourWindowIsAbsent() throws {
+        let data = Data(#"{"id":2,"result":{"rateLimits":{"primary":{"usedPercent":16,"windowDurationMins":10080,"resetsAt":1701000000}}}}"#.utf8)
+
+        let usage = try CodexRateLimitParser.parse(responseData: data)
+
+        XCTAssertNil(usage.fiveHourRemainingPercent)
+        XCTAssertEqual(usage.weeklyRemainingPercent, 84)
+        XCTAssertEqual(usage.availableLimits.map(\.kind), [.weekly])
+        XCTAssertEqual(MenuBarSelection.automatic.presentation(in: usage).text, "Weekly 84%")
+    }
+
+    func testParserPreservesFiveHourWhenWeeklyWindowIsAbsent() throws {
+        let data = Data(#"{"id":2,"result":{"rateLimits":{"primary":{"usedPercent":27,"windowDurationMins":300,"resetsAt":1700000000}}}}"#.utf8)
+
+        let usage = try CodexRateLimitParser.parse(responseData: data)
+
+        XCTAssertEqual(usage.fiveHourRemainingPercent, 73)
+        XCTAssertNil(usage.weeklyRemainingPercent)
+        XCTAssertEqual(usage.availableLimits.map(\.kind), [.fiveHour])
+        XCTAssertEqual(MenuBarSelection.automatic.presentation(in: usage).text, "5H 73%")
+    }
+
     func testMalformedServerResponseThrowsSanitizedError() {
         let data = Data("this is not JSON and must never be logged".utf8)
         XCTAssertThrowsError(try CodexRateLimitParser.parse(responseData: data)) { error in
