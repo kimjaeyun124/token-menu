@@ -74,7 +74,7 @@ final class GlobalShortcutManager {
         Logger(subsystem: "com.kimjaeyun.codexusagemonitor", category: "Lifecycle")
             .notice("Global shortcut received")
         DispatchQueue.main.async {
-            AppVisibilityController.shared.reopenMainWindow()
+            AppVisibilityController.shared.showUsage()
         }
     }
 }

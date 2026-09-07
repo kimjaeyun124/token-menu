@@ -12,6 +12,25 @@ struct CodexUsage: Equatable, Sendable {
         [fiveHourRemainingPercent, weeklyRemainingPercent].compactMap { $0 }.min()
     }
 
+    var availableLimits: [AvailableUsageLimit] {
+        var limits: [AvailableUsageLimit] = []
+        if let fiveHourRemainingPercent {
+            limits.append(AvailableUsageLimit(
+                kind: .fiveHour,
+                remainingPercent: fiveHourRemainingPercent,
+                resetDate: fiveHourResetDate
+            ))
+        }
+        if let weeklyRemainingPercent {
+            limits.append(AvailableUsageLimit(
+                kind: .weekly,
+                remainingPercent: weeklyRemainingPercent,
+                resetDate: weeklyResetDate
+            ))
+        }
+        return limits
+    }
+
     static func unavailable(at date: Date = Date(), source: String = "Unavailable") -> CodexUsage {
         CodexUsage(
             fiveHourRemainingPercent: nil,
@@ -24,30 +43,75 @@ struct CodexUsage: Equatable, Sendable {
     }
 }
 
-enum DockBadgeSelection: String, CaseIterable, Identifiable {
+enum UsageWindowKind: String, Identifiable, Sendable {
+    case fiveHour
+    case weekly
+
+    var id: String { rawValue }
+    var title: String { self == .fiveHour ? "5H" : "Weekly" }
+}
+
+struct AvailableUsageLimit: Identifiable, Equatable, Sendable {
+    let kind: UsageWindowKind
+    let remainingPercent: Double
+    let resetDate: Date?
+
+    var id: UsageWindowKind { kind }
+}
+
+struct MenuBarPresentation: Equatable, Sendable {
+    let label: String
+    let remainingPercent: Double?
+
+    var text: String {
+        guard let remainingPercent else { return "Codex --%" }
+        return "\(label) \(remainingPercent.percentageText)"
+    }
+}
+
+enum MenuBarSelection: String, CaseIterable, Identifiable {
+    case automatic
     case fiveHour
     case weekly
     case lowest
-    case disabled
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
+        case .automatic: return "Automatic"
         case .fiveHour: return "5-Hour %"
         case .weekly: return "Weekly %"
         case .lowest: return "Lowest %"
-        case .disabled: return "Off"
         }
     }
 
-    func value(in usage: CodexUsage) -> Double? {
+    func presentation(in usage: CodexUsage) -> MenuBarPresentation {
         switch self {
-        case .fiveHour: return usage.fiveHourRemainingPercent
-        case .weekly: return usage.weeklyRemainingPercent
-        case .lowest: return usage.lowestRemainingPercent
-        case .disabled: return nil
+        case .automatic, .fiveHour:
+            if let value = usage.fiveHourRemainingPercent {
+                return MenuBarPresentation(label: "5H", remainingPercent: value)
+            }
+            if let value = usage.weeklyRemainingPercent {
+                return MenuBarPresentation(label: "Weekly", remainingPercent: value)
+            }
+        case .weekly:
+            if let value = usage.weeklyRemainingPercent {
+                return MenuBarPresentation(label: "Weekly", remainingPercent: value)
+            }
+            if let value = usage.fiveHourRemainingPercent {
+                return MenuBarPresentation(label: "5H", remainingPercent: value)
+            }
+        case .lowest:
+            let available = usage.availableLimits
+            if let lowest = available.min(by: { $0.remainingPercent < $1.remainingPercent }) {
+                return MenuBarPresentation(
+                    label: available.count == 1 ? lowest.kind.title : "Low",
+                    remainingPercent: lowest.remainingPercent
+                )
+            }
         }
+        return MenuBarPresentation(label: "Codex", remainingPercent: nil)
     }
 }
 
@@ -104,20 +168,16 @@ enum NotificationThreshold: Int, CaseIterable, Identifiable {
 }
 
 enum SettingsKey {
-    static let dockBadgeSelection = "dockBadgeSelection"
+    static let menuBarSelection = "menuBarSelection"
     static let refreshInterval = "refreshInterval"
     static let notificationThreshold = "notificationThreshold"
-    static let showInDock = "showInDock"
-    static let keepRunningWhenWindowClosed = "keepRunningWhenWindowClosed"
     static let globalShortcutEnabled = "globalShortcutEnabled"
 
     static func registerDefaults() {
         UserDefaults.standard.register(defaults: [
-            dockBadgeSelection: DockBadgeSelection.fiveHour.rawValue,
+            menuBarSelection: MenuBarSelection.automatic.rawValue,
             refreshInterval: RefreshInterval.fiveMinutes.rawValue,
             notificationThreshold: NotificationThreshold.twenty.rawValue,
-            showInDock: true,
-            keepRunningWhenWindowClosed: true,
             globalShortcutEnabled: true
         ])
     }

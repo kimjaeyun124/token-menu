@@ -5,9 +5,7 @@ import UserNotifications
 struct SettingsView: View {
     @EnvironmentObject private var refreshService: UsageRefreshService
     @EnvironmentObject private var visibility: AppVisibilityController
-    @AppStorage(SettingsKey.showInDock) private var showInDock = true
-    @AppStorage(SettingsKey.dockBadgeSelection) private var dockBadgeSelection = DockBadgeSelection.fiveHour.rawValue
-    @AppStorage(SettingsKey.keepRunningWhenWindowClosed) private var keepRunningWhenWindowClosed = true
+    @AppStorage(SettingsKey.menuBarSelection) private var menuBarSelection = MenuBarSelection.automatic.rawValue
     @AppStorage(SettingsKey.globalShortcutEnabled) private var globalShortcutEnabled = true
     @AppStorage(SettingsKey.refreshInterval) private var refreshInterval = RefreshInterval.fiveMinutes.rawValue
     @AppStorage(SettingsKey.notificationThreshold) private var notificationThreshold = NotificationThreshold.twenty.rawValue
@@ -16,28 +14,22 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            Section("Dock") {
-                Toggle("Show in Dock", isOn: $showInDock)
-                    .onChange(of: showInDock) { visible in
-                        visibility.setDockVisibility(visible)
-                    }
-
-                Picker("Dock Badge", selection: $dockBadgeSelection) {
-                    ForEach(DockBadgeSelection.allCases) { option in
+            Section("Menu Bar") {
+                Picker("Displayed Percentage", selection: $menuBarSelection) {
+                    ForEach(MenuBarSelection.allCases) { option in
                         Text(option.title).tag(option.rawValue)
                     }
                 }
-                .disabled(!showInDock)
-                .onChange(of: dockBadgeSelection) { _ in refreshService.settingsDidChange() }
-
-                LabeledContent("Current Mode", value: visibility.activationPolicyStatus)
+                .onChange(of: menuBarSelection) { _ in refreshService.settingsDidChange() }
+                LabeledContent("App Mode", value: visibility.activationPolicyStatus)
             }
 
             Section("Application") {
-                Toggle("Keep Running When Window Is Closed", isOn: $keepRunningWhenWindowClosed)
-
                 Toggle("Launch at Login", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { enabled in updateLaunchAtLogin(enabled) }
+                Text("Codex Usage stays available in the menu bar until you choose Quit.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Reopen Shortcut") {
@@ -46,7 +38,7 @@ struct SettingsView: View {
                         visibility.setGlobalShortcutEnabled(enabled)
                     }
                 LabeledContent("Shortcut", value: visibility.shortcutStatus)
-                Text("You can also reopen the window from the Dock, Spotlight, Applications, or by launching the app again.")
+                Text("The menu bar item is always the primary way to open Codex Usage.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -73,8 +65,10 @@ struct SettingsView: View {
                 }
             }
 
-            LabeledContent("Detected Codex", value: refreshService.detectedCodexVersion)
-            LabeledContent("Data Source", value: "Official app-server")
+            Section("Diagnostics") {
+                LabeledContent("Detected Codex", value: refreshService.detectedCodexVersion)
+                LabeledContent("Data Source", value: "Codex app-server account/rateLimits/read")
+            }
 
             if let settingsError {
                 Text(settingsError)

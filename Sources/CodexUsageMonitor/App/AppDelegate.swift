@@ -3,24 +3,45 @@ import OSLog
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    let refreshService = UsageRefreshService()
+    let refreshService: UsageRefreshService
+    private var menuBarController: MenuBarController?
     private let logger = Logger(subsystem: "com.kimjaeyun.codexusagemonitor", category: "Lifecycle")
+
+    override init() {
+#if DEBUG
+        if ProcessInfo.processInfo.environment["CODEX_USAGE_TEST_SCENARIO"] == "weekly-only" {
+            let now = Date()
+            refreshService = UsageRefreshService(provider: RuntimeFixtureUsageProvider(
+                usage: CodexUsage(
+                    fiveHourRemainingPercent: nil,
+                    weeklyRemainingPercent: 84,
+                    fiveHourResetDate: nil,
+                    weeklyResetDate: now.addingTimeInterval(6 * 24 * 60 * 60),
+                    lastUpdated: now,
+                    source: "Runtime fixture"
+                )
+            ))
+        } else {
+            refreshService = UsageRefreshService()
+        }
+#else
+        refreshService = UsageRefreshService()
+#endif
+        super.init()
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let visibility = AppVisibilityController.shared
-        visibility.configure(refreshService: refreshService)
+        let menuBarController = MenuBarController(
+            refreshService: refreshService,
+            visibility: visibility
+        )
+        self.menuBarController = menuBarController
+        visibility.configure(menuBarController: menuBarController)
         visibility.applyStoredSettings()
         refreshService.start()
-
-        let isBackgroundLoginLaunch = ProcessInfo.processInfo.arguments.contains("--background-login")
-        let shouldStayHidden = isBackgroundLoginLaunch
-            && !visibility.showInDock
-            && UserDefaults.standard.bool(forKey: SettingsKey.keepRunningWhenWindowClosed)
-
-        if !shouldStayHidden {
-            visibility.reopenMainWindow()
-        }
-        logger.notice("Launch complete; background hidden: \(shouldStayHidden)")
+        let isLoginLaunch = ProcessInfo.processInfo.arguments.contains("--background-login")
+        logger.notice("Menu bar launch complete; login launch: \(isLoginLaunch)")
     }
 
     func applicationShouldHandleReopen(
@@ -28,13 +49,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hasVisibleWindows flag: Bool
     ) -> Bool {
         logger.notice("Received launch-again event")
-        AppVisibilityController.shared.reopenMainWindow()
+        AppVisibilityController.shared.showUsage()
         return false
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        let shouldTerminate = !UserDefaults.standard.bool(forKey: SettingsKey.keepRunningWhenWindowClosed)
-        logger.notice("Last window closed; terminating: \(shouldTerminate)")
-        return shouldTerminate
+        logger.notice("Window closed; menu bar app remains running")
+        return false
     }
 }
+
+#if DEBUG
+private struct RuntimeFixtureUsageProvider: CodexUsageProviding {
+    let usage: CodexUsage
+    func fetchUsage() async throws -> CodexUsage { usage }
+}
+#endif

@@ -6,66 +6,63 @@ struct UsageWindowView: View {
     @EnvironmentObject private var visibility: AppVisibilityController
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 10) {
             Text("Codex Usage")
-                .font(.largeTitle.bold())
+                .font(.system(size: 17, weight: .semibold))
 
-            UsageView(
-                title: "5-Hour Limit",
-                remainingPercent: refreshService.usage.fiveHourRemainingPercent,
-                resetDate: refreshService.usage.fiveHourResetDate,
-                compactReset: true
-            )
-            UsageView(
-                title: "Weekly Limit",
-                remainingPercent: refreshService.usage.weeklyRemainingPercent,
-                resetDate: refreshService.usage.weeklyResetDate,
-                compactReset: false
-            )
+            if refreshService.usage.availableLimits.isEmpty {
+                Text("Usage unavailable")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 8)
+            } else {
+                ForEach(Array(refreshService.usage.availableLimits.enumerated()), id: \.element.id) { index, limit in
+                    if index > 0 {
+                        Divider()
+                    }
+                    UsageView(limit: limit)
+                }
+            }
 
-            if let errorMessage = refreshService.errorMessage {
-                Label(errorMessage, systemImage: "exclamationmark.triangle")
-                    .font(.caption)
+            if let errorMessage = refreshService.errorMessage,
+               refreshService.usage.availableLimits.isEmpty {
+                Text(errorMessage)
+                    .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Last updated \(refreshService.usage.lastUpdated.formatted(date: .omitted, time: .shortened))")
-                    Text(refreshService.usage.source)
-                }
-                .font(.caption2)
+            Divider()
+
+            Text("Updated \(refreshService.usage.lastUpdated.formatted(date: .omitted, time: .shortened))")
+                .font(.system(size: 10))
                 .foregroundStyle(.secondary)
-                Spacer()
-                Button {
+
+            HStack {
+                Button("Refresh") {
                     Task { await refreshService.refresh() }
-                } label: {
-                    if refreshService.isRefreshing {
-                        ProgressView().controlSize(.small)
-                    } else {
-                        Label("Refresh", systemImage: "arrow.clockwise")
-                    }
                 }
                 .disabled(refreshService.isRefreshing)
                 .keyboardShortcut("r")
-            }
 
-            Divider()
-            HStack {
-                if #available(macOS 14.0, *) {
-                    SettingsLink { Text("Settings…") }
-                        .keyboardShortcut(",")
-                } else {
-                    Button("Settings…") { visibility.showSettings() }
-                        .keyboardShortcut(",")
-                }
                 Spacer()
+
+                if #available(macOS 14.0, *) {
+                    SettingsLink { Text("Settings") }
+                } else {
+                    Button("Settings") { visibility.showSettings() }
+                }
+
+                Spacer()
+
                 Button("Quit") { NSApplication.shared.terminate(nil) }
                     .keyboardShortcut("q")
             }
+            .buttonStyle(.borderless)
+            .font(.system(size: 12))
         }
-        .padding(20)
-        .frame(minWidth: 380, idealWidth: 410, minHeight: 560, idealHeight: 610)
+        .padding(14)
+        .frame(width: 330)
     }
 }

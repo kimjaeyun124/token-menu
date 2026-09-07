@@ -1,50 +1,40 @@
 import SwiftUI
 
 struct UsageView: View {
-    let title: String
-    let remainingPercent: Double?
-    let resetDate: Date?
-    let compactReset: Bool
+    let limit: AvailableUsageLimit
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 5) {
             HStack(alignment: .firstTextBaseline) {
-                Text(title)
-                    .font(.headline)
+                Text(limit.kind.title)
+                    .font(.system(size: 13, weight: .semibold))
                 Spacer()
-                if let remainingPercent {
-                    StatusLabel(level: UsageLevel(remainingPercent: remainingPercent))
-                }
-            }
-
-            if let remainingPercent {
-                Text("\(remainingPercent.percentageText) remaining")
-                    .font(.system(size: 27, weight: .bold, design: .rounded))
+                Text(limit.remainingPercent.percentageText)
+                    .font(.system(size: 18, weight: .bold, design: .rounded))
                     .monospacedDigit()
-                    .accessibilityLabel("\(title), \(remainingPercent.percentageText) remaining")
-                ProgressView(value: remainingPercent, total: 100)
-                    .progressViewStyle(.linear)
-                    .tint(color(for: UsageLevel(remainingPercent: remainingPercent)))
-            } else {
-                Text("Unavailable")
-                    .font(.title2.weight(.semibold))
-                ProgressView(value: 0, total: 100)
-                    .progressViewStyle(.linear)
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(
+                "\(limit.kind.title), \(limit.remainingPercent.percentageText) remaining"
+            )
+
+            ProgressView(value: limit.remainingPercent, total: 100)
+                .progressViewStyle(.linear)
+                .tint(color(for: UsageLevel(remainingPercent: limit.remainingPercent)))
+                .controlSize(.mini)
+                .frame(height: 5)
 
             TimelineView(.periodic(from: .now, by: 60)) { context in
                 Text(resetText(at: context.date))
-                    .font(.caption)
+                    .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(12)
-        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
     }
 
     private func resetText(at now: Date) -> String {
-        guard let resetDate else { return "Reset unavailable" }
-        if compactReset {
+        guard let resetDate = limit.resetDate else { return "Reset unavailable" }
+        if limit.kind == .fiveHour {
             let seconds = max(0, resetDate.timeIntervalSince(now))
             let hours = Int(seconds) / 3_600
             let minutes = (Int(seconds) % 3_600) / 60
@@ -61,22 +51,3 @@ struct UsageView: View {
         }
     }
 }
-
-private struct StatusLabel: View {
-    let level: UsageLevel
-
-    var body: some View {
-        Label(level.rawValue, systemImage: level.symbolName)
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(color)
-    }
-
-    private var color: Color {
-        switch level {
-        case .normal: return .green
-        case .warning: return .orange
-        case .critical: return .red
-        }
-    }
-}
-

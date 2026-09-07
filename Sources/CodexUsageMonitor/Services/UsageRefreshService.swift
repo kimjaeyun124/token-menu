@@ -1,4 +1,3 @@
-import AppKit
 import Foundation
 import UserNotifications
 import OSLog
@@ -71,7 +70,6 @@ final class UsageRefreshService: ObservableObject {
             evaluateNotifications(previous: previousUsage, current: newUsage)
             previousUsage = newUsage
             usage = newUsage
-            updateDockBadge()
             Logger(subsystem: "com.kimjaeyun.codexusagemonitor", category: "Refresh")
                 .notice("Usage refresh completed")
         } catch {
@@ -80,13 +78,11 @@ final class UsageRefreshService: ObservableObject {
             if usage.fiveHourRemainingPercent == nil && usage.weeklyRemainingPercent == nil {
                 usage = .unavailable(source: "Codex app-server")
             }
-            updateDockBadge()
         }
     }
 
     func settingsDidChange(rescheduleTimer: Bool = false) {
         settingsRevision += 1
-        updateDockBadge()
         if rescheduleTimer { reschedule() }
     }
 
@@ -97,18 +93,6 @@ final class UsageRefreshService: ObservableObject {
         scheduler.schedule(every: TimeInterval(interval.rawValue)) { [weak self] in
             await self?.refresh()
         }
-    }
-
-    private func updateDockBadge() {
-        _ = settingsRevision
-        let raw = UserDefaults.standard.string(forKey: SettingsKey.dockBadgeSelection)
-            ?? DockBadgeSelection.fiveHour.rawValue
-        let selection = DockBadgeSelection(rawValue: raw) ?? .fiveHour
-        let showInDock = UserDefaults.standard.bool(forKey: SettingsKey.showInDock)
-        DockBadgeManager.update(
-            value: selection.value(in: usage),
-            isEnabled: showInDock && selection != .disabled
-        )
     }
 
     private func evaluateNotifications(previous: CodexUsage?, current: CodexUsage) {
