@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import UserNotifications
+import OSLog
 
 @MainActor
 protocol RefreshScheduling: AnyObject {
@@ -48,20 +49,7 @@ final class UsageRefreshService: ObservableObject {
         self.provider = provider
         self.detector = detector
         self.scheduler = scheduler ?? TimerRefreshScheduler()
-        UserDefaults.standard.register(defaults: [
-            SettingsKey.menuBarSelection: UsageSelection.fiveHour.rawValue,
-            SettingsKey.dockBadgeSelection: DockBadgeSelection.fiveHour.rawValue,
-            SettingsKey.refreshInterval: RefreshInterval.fiveMinutes.rawValue,
-            SettingsKey.notificationThreshold: NotificationThreshold.twenty.rawValue
-        ])
-    }
-
-    var menuBarText: String {
-        _ = settingsRevision
-        let raw = UserDefaults.standard.string(forKey: SettingsKey.menuBarSelection)
-            ?? UsageSelection.fiveHour.rawValue
-        let selection = UsageSelection(rawValue: raw) ?? .fiveHour
-        return selection.value(in: usage)?.percentageText ?? "--%"
+        SettingsKey.registerDefaults()
     }
 
     func start() {
@@ -84,6 +72,8 @@ final class UsageRefreshService: ObservableObject {
             previousUsage = newUsage
             usage = newUsage
             updateDockBadge()
+            Logger(subsystem: "com.kimjaeyun.codexusagemonitor", category: "Refresh")
+                .notice("Usage refresh completed")
         } catch {
             errorMessage = (error as? LocalizedError)?.errorDescription
                 ?? "Codex usage information is unavailable."
@@ -114,7 +104,11 @@ final class UsageRefreshService: ObservableObject {
         let raw = UserDefaults.standard.string(forKey: SettingsKey.dockBadgeSelection)
             ?? DockBadgeSelection.fiveHour.rawValue
         let selection = DockBadgeSelection(rawValue: raw) ?? .fiveHour
-        DockBadgeManager.update(value: selection.value(in: usage), isEnabled: selection != .disabled)
+        let showInDock = UserDefaults.standard.bool(forKey: SettingsKey.showInDock)
+        DockBadgeManager.update(
+            value: selection.value(in: usage),
+            isEnabled: showInDock && selection != .disabled
+        )
     }
 
     private func evaluateNotifications(previous: CodexUsage?, current: CodexUsage) {

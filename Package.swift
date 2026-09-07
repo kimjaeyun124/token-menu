@@ -6,12 +6,17 @@ let package = Package(
     name: "CodexUsageMonitor",
     platforms: [.macOS(.v13)],
     products: [
-        .executable(name: "CodexUsageMonitor", targets: ["CodexUsageMonitor"])
+        .executable(name: "CodexUsageMonitor", targets: ["CodexUsageMonitor"]),
+        .executable(name: "CodexUsageLauncher", targets: ["CodexUsageLauncher"])
     ],
     targets: [
         .executableTarget(
             name: "CodexUsageMonitor",
             path: "Sources/CodexUsageMonitor"
+        ),
+        .executableTarget(
+            name: "CodexUsageLauncher",
+            path: "Sources/CodexUsageLauncher"
         ),
         .testTarget(
             name: "CodexUsageMonitorTests",
@@ -20,4 +25,3 @@ let package = Package(
         )
     ]
 )
-

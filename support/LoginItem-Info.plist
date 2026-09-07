@@ -5,28 +5,25 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleDisplayName</key>
-    <string>Codex Usage</string>
+    <string>Codex Usage Launcher</string>
     <key>CFBundleExecutable</key>
-    <string>CodexUsageMonitor</string>
+    <string>CodexUsageLauncher</string>
     <key>CFBundleIdentifier</key>
-    <string>com.kimjaeyun.codexusagemonitor</string>
+    <string>com.kimjaeyun.codexusagemonitor.Launcher</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>Codex Usage</string>
+    <string>Codex Usage Launcher</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
     <string>1.0.0</string>
     <key>CFBundleVersion</key>
     <string>1</string>
+    <key>LSBackgroundOnly</key>
+    <true/>
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
-    <key>LSUIElement</key>
-    <false/>
-    <key>LSMultipleInstancesProhibited</key>
-    <true/>
-    <key>NSHighResolutionCapable</key>
-    <true/>
 </dict>
 </plist>
+

@@ -1,13 +1,14 @@
 import AppKit
 import SwiftUI
 
-struct MenuBarView: View {
+struct UsageWindowView: View {
     @EnvironmentObject private var refreshService: UsageRefreshService
+    @EnvironmentObject private var visibility: AppVisibilityController
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
             Text("Codex Usage")
-                .font(.title2.bold())
+                .font(.largeTitle.bold())
 
             UsageView(
                 title: "5-Hour Limit",
@@ -47,19 +48,24 @@ struct MenuBarView: View {
                     }
                 }
                 .disabled(refreshService.isRefreshing)
+                .keyboardShortcut("r")
             }
 
             Divider()
             HStack {
-                Button("Settings…") {
-                    NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+                if #available(macOS 14.0, *) {
+                    SettingsLink { Text("Settings…") }
+                        .keyboardShortcut(",")
+                } else {
+                    Button("Settings…") { visibility.showSettings() }
+                        .keyboardShortcut(",")
                 }
                 Spacer()
-                Button("Quit") { NSApp.terminate(nil) }
+                Button("Quit") { NSApplication.shared.terminate(nil) }
+                    .keyboardShortcut("q")
             }
         }
-        .padding(14)
-        .frame(width: 340)
+        .padding(20)
+        .frame(minWidth: 380, idealWidth: 410, minHeight: 560, idealHeight: 610)
     }
 }
-

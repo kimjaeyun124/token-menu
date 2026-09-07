@@ -24,30 +24,6 @@ struct CodexUsage: Equatable, Sendable {
     }
 }
 
-enum UsageSelection: String, CaseIterable, Identifiable {
-    case fiveHour
-    case weekly
-    case lowest
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .fiveHour: return "5-Hour %"
-        case .weekly: return "Weekly %"
-        case .lowest: return "Lowest %"
-        }
-    }
-
-    func value(in usage: CodexUsage) -> Double? {
-        switch self {
-        case .fiveHour: return usage.fiveHourRemainingPercent
-        case .weekly: return usage.weeklyRemainingPercent
-        case .lowest: return usage.lowestRemainingPercent
-        }
-    }
-}
-
 enum DockBadgeSelection: String, CaseIterable, Identifiable {
     case fiveHour
     case weekly
@@ -128,10 +104,23 @@ enum NotificationThreshold: Int, CaseIterable, Identifiable {
 }
 
 enum SettingsKey {
-    static let menuBarSelection = "menuBarSelection"
     static let dockBadgeSelection = "dockBadgeSelection"
     static let refreshInterval = "refreshInterval"
     static let notificationThreshold = "notificationThreshold"
+    static let showInDock = "showInDock"
+    static let keepRunningWhenWindowClosed = "keepRunningWhenWindowClosed"
+    static let globalShortcutEnabled = "globalShortcutEnabled"
+
+    static func registerDefaults() {
+        UserDefaults.standard.register(defaults: [
+            dockBadgeSelection: DockBadgeSelection.fiveHour.rawValue,
+            refreshInterval: RefreshInterval.fiveMinutes.rawValue,
+            notificationThreshold: NotificationThreshold.twenty.rawValue,
+            showInDock: true,
+            keepRunningWhenWindowClosed: true,
+            globalShortcutEnabled: true
+        ])
+    }
 }
 
 extension Double {
@@ -144,4 +133,3 @@ extension Double {
         return remainingPercent
     }
 }
-
