@@ -7,9 +7,10 @@ The product is **Token Menu**; the GitHub repository and download filenames use 
 ```sh
 swift test
 ./scripts/build-dmg.sh
-hdiutil verify dist/token-menu-1.0.0-macOS-universal.dmg
+VERSION=1.0.1
+hdiutil verify "dist/token-menu-${VERSION}-macOS-universal.dmg"
 cd dist
-shasum -a 256 -c token-menu-1.0.0-macOS-universal.dmg.sha256
+shasum -a 256 -c "token-menu-${VERSION}-macOS-universal.dmg.sha256"
 ```
 
 The default build contains arm64 and x86_64 slices in both the app and login helper. The DMG contains Token Menu.app, an Applications shortcut, and bilingual installation instructions. Build output and previous local ZIPs are excluded from Git.
@@ -29,14 +30,14 @@ For a notarized public build, the maintainer must sign the helper and app with t
 Commit the reviewed source and documentation to the repository before tagging the same commit. Upload the DMG and its checksum to a release, not to the source tree.
 
 ```sh
-git tag v1.0.0
+git tag v1.0.1
 git push origin main
-git push origin v1.0.0
-gh release create v1.0.0 \
-  dist/token-menu-1.0.0-macOS-universal.dmg \
-  dist/token-menu-1.0.0-macOS-universal.dmg.sha256 \
+git push origin v1.0.1
+gh release create v1.0.1 \
+  dist/token-menu-1.0.1-macOS-universal.dmg \
+  dist/token-menu-1.0.1-macOS-universal.dmg.sha256 \
   --repo kimjaeyun124/token-menu --verify-tag \
-  --title "Token Menu 1.0.0" --notes-file docs/releases/v1.0.0.md
+  --title "Token Menu 1.0.1" --notes-file docs/releases/v1.0.1.md
 ```
 
 A private repository's releases can only be downloaded by authorized users. Publishing a release does not change repository visibility.

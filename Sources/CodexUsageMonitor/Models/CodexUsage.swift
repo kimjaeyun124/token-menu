@@ -137,10 +137,10 @@ struct MenuBarPresentation: Equatable, Sendable {
         guard let window else {
             return unavailableSegment(label: missingLabel, provider: provider, settings: settings)
         }
-        let percentage = formattedPercentage(
-            window.remainingPercent,
+        let percentage = PercentageFormatter.string(
+            for: window.remainingPercent,
             precision: settings.percentagePrecision
-        )
+        ) ?? PercentageFormatter.unavailable(settings.unavailableDisplay)
         return Segment(
             provider: provider,
             label: window.shortName,
@@ -168,7 +168,7 @@ struct MenuBarPresentation: Equatable, Sendable {
                 segments: []
             )
         }
-        let value = settings.unavailableDisplay == .dashes ? "--%" : "N/A"
+        let value = PercentageFormatter.unavailable(settings.unavailableDisplay)
         let segments = provider.map {
             [Segment(
                 provider: $0,
@@ -194,7 +194,7 @@ struct MenuBarPresentation: Equatable, Sendable {
         guard settings.unavailableDisplay != .hidden else {
             return Segment(provider: provider, label: label, remainingPercent: nil, text: "")
         }
-        let value = settings.unavailableDisplay == .dashes ? "--%" : "N/A"
+        let value = PercentageFormatter.unavailable(settings.unavailableDisplay)
         return Segment(
             provider: provider,
             label: label,
@@ -227,15 +227,6 @@ struct MenuBarPresentation: Equatable, Sendable {
         return core
     }
 
-    private static func formattedPercentage(
-        _ value: Double,
-        precision: PercentagePrecision
-    ) -> String {
-        switch precision {
-        case .integer: return "\(Int(value.rounded()))%"
-        case .oneDecimal: return String(format: "%.1f%%", value)
-        }
-    }
 }
 
 enum UsageLevel: String, Equatable {
@@ -255,7 +246,9 @@ enum UsageLevel: String, Equatable {
 }
 
 extension Double {
-    var percentageText: String { "\(Int(rounded()))%" }
+    var percentageText: String {
+        PercentageFormatter.string(for: self, precision: .integer) ?? "N/A"
+    }
 
     static func remaining(fromUsedPercent usedPercent: Double) -> Double? {
         guard usedPercent.isFinite, (0...100).contains(usedPercent) else { return nil }

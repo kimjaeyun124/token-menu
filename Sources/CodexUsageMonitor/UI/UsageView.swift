@@ -54,10 +54,10 @@ struct UsageView: View {
     }
 
     private var percentageText: String {
-        switch settings.percentagePrecision {
-        case .integer: return limit.remainingPercent.percentageText
-        case .oneDecimal: return String(format: "%.1f%%", limit.remainingPercent)
-        }
+        PercentageFormatter.string(
+            for: limit.remainingPercent,
+            precision: settings.percentagePrecision
+        ) ?? PercentageFormatter.unavailable(settings.unavailableDisplay)
     }
 
     private var shouldShowProgressBar: Bool {

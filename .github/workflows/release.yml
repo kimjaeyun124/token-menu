@@ -24,8 +24,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          version="${GITHUB_REF_NAME#v}"
           gh release create "$GITHUB_REF_NAME" \
-            dist/token-menu-1.0.0-macOS-universal.dmg \
-            dist/token-menu-1.0.0-macOS-universal.dmg.sha256 \
-            --title "Token Menu 1.0.0" \
-            --notes-file docs/releases/v1.0.0.md
+            "dist/token-menu-${version}-macOS-universal.dmg" \
+            "dist/token-menu-${version}-macOS-universal.dmg.sha256" \
+            --title "Token Menu ${version}" \
+            --notes-file "docs/releases/${GITHUB_REF_NAME}.md"

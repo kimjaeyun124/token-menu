@@ -159,6 +159,42 @@ final class CodexUsageTests: XCTestCase {
         XCTAssertEqual(value.text, "5H | 28%")
     }
 
+    func testPercentageFormatterUsesExplicitFractionDigitsAndRounding() {
+        XCTAssertEqual(PercentageFormatter.string(for: 0, precision: .integer), "0%")
+        XCTAssertEqual(PercentageFormatter.string(for: 0, precision: .oneDecimal), "0.0%")
+        XCTAssertEqual(PercentageFormatter.string(for: 1, precision: .oneDecimal), "1.0%")
+        XCTAssertEqual(PercentageFormatter.string(for: 68, precision: .oneDecimal), "68.0%")
+        XCTAssertEqual(PercentageFormatter.string(for: 99, precision: .oneDecimal), "99.0%")
+        XCTAssertEqual(PercentageFormatter.string(for: 100, precision: .oneDecimal), "100.0%")
+        XCTAssertEqual(PercentageFormatter.string(for: 51.34, precision: .oneDecimal), "51.3%")
+        XCTAssertEqual(PercentageFormatter.string(for: 51.36, precision: .oneDecimal), "51.4%")
+        XCTAssertEqual(PercentageFormatter.string(for: 99.96, precision: .oneDecimal), "100.0%")
+    }
+
+    func testPercentageFormatterRejectsInvalidValuesAsUnavailable() {
+        XCTAssertNil(PercentageFormatter.string(for: nil, precision: .oneDecimal))
+        XCTAssertNil(PercentageFormatter.string(for: -.ulpOfOne, precision: .oneDecimal))
+        XCTAssertNil(PercentageFormatter.string(for: 100.001, precision: .oneDecimal))
+        XCTAssertNil(PercentageFormatter.string(for: .nan, precision: .oneDecimal))
+        XCTAssertNil(PercentageFormatter.string(for: .infinity, precision: .oneDecimal))
+    }
+
+    @MainActor
+    func testBothProvidersUseOneDecimalMenuBarFormatting() {
+        let store = makeStore()
+        store.settings.menuBarProvider = .both
+        store.settings.percentagePrecision = .oneDecimal
+        let codex = makeUsage(provider: .codex, fiveHour: 99, weekly: nil)
+        let claude = makeUsage(provider: .claudeCode, fiveHour: 71.36, weekly: nil)
+        XCTAssertEqual(
+            MenuBarPresentation.resolve(
+                usages: [.codex: codex, .claudeCode: claude],
+                settings: store.settings
+            ).text,
+            "5H | 99.0% / 5H | 71.4%"
+        )
+    }
+
     @MainActor
     func testWeeklyFallbackWhenFiveHourIsMissing() {
         let store = makeStore()

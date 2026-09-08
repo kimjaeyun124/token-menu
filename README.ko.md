@@ -72,7 +72,7 @@ CODEX_LIVE_TEST=1 swift test --filter CodexUsageTests.testLiveCodexProviderWhenE
 open "dist/Token Menu.app"
 ```
 
-결과물은 `dist/Token Menu.app`, `dist/token-menu-1.0.0-macOS-universal.dmg`, 검증용 `.sha256` 파일입니다. 단일 아키텍처로 빌드하려면 `ARCHITECTURE=arm64` 또는 `ARCHITECTURE=x86_64`를 지정하세요. 앱을 이미 빌드했다면 `SKIP_BUILD=1 ./scripts/build-dmg.sh`로 DMG만 생성할 수 있습니다.
+결과물은 `dist/Token Menu.app`, `dist/token-menu-1.0.1-macOS-universal.dmg`, 검증용 `.sha256` 파일입니다. 단일 아키텍처로 빌드하려면 `ARCHITECTURE=arm64` 또는 `ARCHITECTURE=x86_64`를 지정하세요. 앱을 이미 빌드했다면 `SKIP_BUILD=1 ./scripts/build-dmg.sh`로 DMG만 생성할 수 있습니다.
 
 서명과 배포 방법, 검증 범위는 [배포 문서](docs/distribution.md)를 참고하세요. 기존 설정을 유지하기 위해 내부 Swift 타깃 이름과 번들 식별자는 유지합니다.
 

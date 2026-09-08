@@ -357,7 +357,10 @@ final class UsageRefreshService: ObservableObject {
             format: settingsStore.localized("notification.body"),
             locale: settingsStore.settings.language.locale,
             type == .fiveHour ? "5H" : settingsStore.localized("limit.weekly"),
-            new.percentageText
+            PercentageFormatter.string(
+                for: new,
+                precision: settingsStore.settings.percentagePrecision
+            ) ?? PercentageFormatter.unavailable(settingsStore.settings.unavailableDisplay)
         )
         content.sound = .default
         let request = UNNotificationRequest(

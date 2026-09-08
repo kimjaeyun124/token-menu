@@ -72,7 +72,7 @@ CODEX_LIVE_TEST=1 swift test --filter CodexUsageTests.testLiveCodexProviderWhenE
 open "dist/Token Menu.app"
 ```
 
-Outputs: `dist/Token Menu.app`, `dist/token-menu-1.0.0-macOS-universal.dmg`, and its `.sha256` checksum. Set `ARCHITECTURE=arm64` or `ARCHITECTURE=x86_64` for a single-architecture build. Use `SKIP_BUILD=1 ./scripts/build-dmg.sh` to package an already-built app.
+Outputs: `dist/Token Menu.app`, `dist/token-menu-1.0.1-macOS-universal.dmg`, and its `.sha256` checksum. Set `ARCHITECTURE=arm64` or `ARCHITECTURE=x86_64` for a single-architecture build. Use `SKIP_BUILD=1 ./scripts/build-dmg.sh` to package an already-built app.
 
 See [distribution notes](docs/distribution.md) for signing, release commands, and verification limits. Internal Swift target names and bundle identifiers remain stable to preserve saved settings.
 
