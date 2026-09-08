@@ -29,9 +29,22 @@ Token Menu shows service-provided usage limits, not estimated token counts. Miss
 | Service | Current behavior |
 | --- | --- |
 | Codex | Reads live limits through the installed, authenticated Codex app-server. |
-| Claude Code | Can be configured as a provider, but background usage retrieval is currently unavailable in this implementation. |
+| Claude Code | Reads live 5-hour and 7-day limits from Claude Code's documented status-line JSON bridge (Claude.ai subscribers only). |
 
-Claude Code's interactive usage screen is not a standalone background API. Token Menu does not scrape that screen or change your Claude configuration to work around this limitation.
+### Claude Code status-line setup
+
+Claude Code 2.1.80 and later passes subscription rate limits to a configured status-line command. Token Menu includes a bridge at `support/claude-statusline-token-menu.sh` that stores only that JSON payload (never credentials or cookies). Add it to your Claude Code `~/.claude/settings.json`:
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "/absolute/path/to/token-menu/support/claude-statusline-token-menu.sh"
+  }
+}
+```
+
+Keep Claude Code running and complete one response; Token Menu will then show the latest 5-hour and weekly remaining percentages. If `statusLine` is already configured, compose the bridge with your existing command rather than replacing it. Rate limits are absent for API-key and unsupported plans, so the app reports an unavailable state instead of fabricating a value.
 
 ## Install
 

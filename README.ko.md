@@ -29,9 +29,22 @@ Token Menu는 서비스가 제공하는 사용량 한도를 표시합니다. 토
 | 서비스 | 현재 동작 |
 | --- | --- |
 | Codex | 설치되어 있고 로그인된 Codex의 app-server를 통해 실제 사용량 한도를 조회합니다. |
-| Claude Code | 서비스로 선택할 수 있지만, 현재 구현에서는 백그라운드 사용량 조회를 지원하지 않습니다. |
+| Claude Code | Claude Code의 공식 status line JSON 브리지를 통해 5시간·7일 한도의 실제 남은 사용량을 표시합니다(Claude.ai 구독 계정). |
 
-Claude Code의 대화형 사용량 화면은 독립적인 백그라운드 조회 API가 아닙니다. Token Menu는 해당 화면을 수집하거나 조회를 위해 Claude 설정을 변경하지 않습니다.
+### Claude Code status line 연결
+
+Claude Code 2.1.80 이상은 설정된 status line 명령에 구독 한도 정보를 JSON으로 전달합니다. Token Menu에는 이 JSON(인증 토큰·쿠키는 포함하지 않음)만 저장하는 `support/claude-statusline-token-menu.sh` 브리지가 포함되어 있습니다. Claude Code의 `~/.claude/settings.json`에 다음을 추가하세요.
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "/absolute/path/to/token-menu/support/claude-statusline-token-menu.sh"
+  }
+}
+```
+
+이미 `statusLine`을 사용 중이라면 기존 명령을 덮어쓰지 말고 브리지 저장 동작을 함께 실행하도록 구성하세요. Claude Code에서 한 번 응답을 완료하면 Token Menu가 최신 5시간·주간 남은 사용량을 표시합니다. API 키 인증이나 지원되지 않는 요금제에서는 한도 정보가 없어 임의의 값을 표시하지 않고 사용할 수 없음으로 안내합니다.
 
 ## 설치
 

@@ -479,9 +479,44 @@ final class CodexUsageTests: XCTestCase {
         XCTAssertFalse(AppDelegate().applicationShouldTerminateAfterLastWindowClosed(.shared))
     }
 
-    func testClaudeProviderIsUnavailableWithoutStandaloneInterface() async {
-        let available = await ClaudeCodeUsageProvider().isAvailable()
+    func testClaudeProviderIsUnavailableWithoutStatusLineBridge() async {
+        let missingURL = URL(fileURLWithPath: "/tmp/token-menu-missing-claude-statusline-(UUID().uuidString).json")
+        let available = await ClaudeCodeUsageProvider(usageFileURL: missingURL).isAvailable()
         XCTAssertFalse(available)
+    }
+
+    func testClaudeStatusLineParserMapsRateLimitsToRemainingUsage() throws {
+        let data = Data(#"{"rate_limits":{"five_hour":{"used_percentage":23.5,"resets_at":1738425600},"seven_day":{"used_percentage":41.2,"resets_at":1738857600}}}"#.utf8)
+        let usage = try ClaudeRateLimitParser.parse(data: data, now: Date(timeIntervalSince1970: 100))
+        XCTAssertEqual(usage.provider, .claudeCode)
+        XCTAssertEqual(usage.fiveHourRemainingPercent!, 76.5, accuracy: 0.001)
+        XCTAssertEqual(usage.weeklyRemainingPercent!, 58.8, accuracy: 0.001)
+        XCTAssertEqual(usage.fiveHourResetDate, Date(timeIntervalSince1970: 1738425600))
+    }
+
+    func testClaudeStatusLineParserRejectsMissingRateLimits() {
+        XCTAssertThrowsError(try ClaudeRateLimitParser.parse(data: Data(#"{"model":{"display_name":"Sonnet"}}"#.utf8))) { error in
+            XCTAssertEqual(error as? ClaudeCodeUsageError, .unsupportedPlan)
+        }
+    }
+
+    func testClaudeStatusLineParserOmitsInvalidWindowButKeepsValidWindow() throws {
+        let data = Data(#"{"rate_limits":{"five_hour":{"used_percentage":-1,"resets_at":1738425600},"seven_day":{"used_percentage":50,"resets_at":1738857600}}}"#.utf8)
+        let usage = try ClaudeRateLimitParser.parse(data: data)
+        XCTAssertNil(usage.fiveHourRemainingPercent)
+        XCTAssertEqual(usage.weeklyRemainingPercent!, 50, accuracy: 0.001)
+    }
+
+    func testClaudeProviderReadsConfiguredStatusLinePayload() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("token-menu-claude-(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let payloadURL = directory.appendingPathComponent("statusline.json")
+        let payload = Data(#"{"rate_limits":{"five_hour":{"used_percentage":12.5,"resets_at":1738425600}}}"#.utf8)
+        try payload.write(to: payloadURL)
+        let usage = try await ClaudeCodeUsageProvider(usageFileURL: payloadURL).fetchUsage()
+        XCTAssertEqual(usage.fiveHourRemainingPercent!, 87.5, accuracy: 0.001)
+        XCTAssertEqual(usage.source, "Claude Code status line rate_limits")
     }
 
     func testLiveCodexProviderWhenExplicitlyEnabled() async throws {

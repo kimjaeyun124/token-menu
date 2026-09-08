@@ -43,6 +43,8 @@ if [[ -d "$resource_bundle" ]]; then
 fi
 cp "$repo_dir/support/Info.plist" "$contents_dir/Info.plist"
 cp "$repo_dir/support/token-menu.icns" "$resources_dir/token-menu.icns"
+cp "$repo_dir/support/claude-statusline-token-menu.sh" "$resources_dir/claude-statusline-token-menu.sh"
+chmod 755 "$resources_dir/claude-statusline-token-menu.sh"
 lipo -create "${launcher_binaries[@]}" -output "$login_item_binary_dir/CodexUsageLauncher"
 cp "$repo_dir/support/LoginItem-Info.plist" "$login_item_contents/Info.plist"
 codesign --force --deep --sign - "$login_item_dir"

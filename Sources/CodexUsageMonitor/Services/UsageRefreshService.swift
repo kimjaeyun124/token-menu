@@ -197,7 +197,7 @@ final class UsageRefreshService: ObservableObject {
 
     private nonisolated static func collectDiagnostics() -> [AIProvider: ProviderDiagnostics] {
         var result = Dictionary(uniqueKeysWithValues: AIProvider.allCases.map {
-            ($0, ProviderDiagnostics(source: $0 == .codex ? "Codex app-server" : "No supported background interface"))
+            ($0, ProviderDiagnostics(source: $0 == .codex ? "Codex app-server" : "Claude Code status line"))
         })
 
         var codex = result[.codex] ?? ProviderDiagnostics()
@@ -214,9 +214,9 @@ final class UsageRefreshService: ObservableObject {
             claude.installed = true
             claude.version = (try? ProcessRunner.run(executableURL: executable, arguments: ["--version"]))?
                 .standardOutput.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Unknown"
-            claude.status = "Usage interface unavailable"
+            claude.status = "Status line bridge ready when configured"
         }
-        claude.source = "No supported background interface"
+        claude.source = "Claude Code status line"
         result[.claudeCode] = claude
         return result
     }

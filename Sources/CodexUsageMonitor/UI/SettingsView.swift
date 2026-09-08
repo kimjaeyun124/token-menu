@@ -227,6 +227,14 @@ struct SettingsView: View {
                 }
             }
             .padding(8)
+            if provider == .claudeCode {
+                Text(l("claude.statusline_hint"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 8)
+            }
         }
     }
 
@@ -462,6 +470,9 @@ struct SettingsView: View {
 
     private func localizedSource(_ source: String) -> String {
         if source == "No supported background interface" { return l("diagnostics.no_background_source") }
+        if source == "Claude Code status line" || source == "Claude Code status line rate_limits" {
+            return l("diagnostics.claude_statusline_source")
+        }
         return source
     }
 
@@ -471,6 +482,7 @@ struct SettingsView: View {
         case "Installed": return l("diagnostics.installed")
         case "Refreshing": return l("refresh.in_progress")
         case "Usage interface unavailable": return l("status.unsupported")
+        case "Status line bridge ready when configured": return l("status.claude_bridge")
         case "Not checked": return l("status.not_checked")
         default:
             if status.contains("background usage interface") { return l("status.unsupported") }

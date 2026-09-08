@@ -14,7 +14,7 @@ Token Menu source code is licensed under the [MIT License](LICENSE). This licens
 
 - Original supplied filename: `claude.png`.
 - Bundled path: `Sources/CodexUsageMonitor/Resources/claude-provider.png`.
-- Used only to identify the supported Claude Code service in the menu bar and usage panel. Inclusion of the icon does not imply that background usage retrieval is available.
+- Used only to identify the supported Claude Code service in the menu bar and usage panel. Usage is read through the documented Claude Code status-line bridge; Token Menu does not read Claude credentials or call private Anthropic endpoints.
 - Trademark and branding rights remain with Anthropic.
 - The asset is not licensed under Token Menu's MIT License. Its inclusion is not a claim of ownership, endorsement, or a separate trademark license.
 
