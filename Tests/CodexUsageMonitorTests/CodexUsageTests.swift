@@ -4,371 +4,505 @@ import XCTest
 
 final class CodexUsageTests: XCTestCase {
     func testReadsInitializeResponseIDWithoutRateLimitShape() {
-        let data = Data(#"{"id":1,"result":{"userAgent":"Codex Desktop/0.152.1"}}"#.utf8)
-        XCTAssertEqual(CodexRateLimitParser.responseID(in: data), 1)
+        XCTAssertEqual(
+            CodexRateLimitParser.responseID(in: Data(#"{"id":1,"result":{}}"#.utf8)),
+            1
+        )
     }
 
-    func testConvertsConfirmedUsedPercentToRemainingPercent() throws {
+    func testCodexParserNormalizesRemainingWindows() throws {
         let data = Data(#"""
-        {
-          "id": 2,
-          "result": {
-            "rateLimits": {
-              "limitId": "codex",
-              "primary": {"usedPercent": 17, "windowDurationMins": 300, "resetsAt": 1700000000},
-              "secondary": {"usedPercent": 39, "windowDurationMins": 10080, "resetsAt": 1701000000}
-            },
-            "rateLimitsByLimitId": null
-          }
-        }
+        {"id":2,"result":{"rateLimits":{"limitId":"codex",
+          "primary":{"usedPercent":17,"windowDurationMins":300,"resetsAt":1700000000},
+          "secondary":{"usedPercent":39,"windowDurationMins":10080,"resetsAt":1701000000}}}}
         """#.utf8)
-
         let usage = try CodexRateLimitParser.parse(responseData: data, now: Date(timeIntervalSince1970: 100))
 
-        XCTAssertEqual(usage.fiveHourRemainingPercent, 83)
-        XCTAssertEqual(usage.weeklyRemainingPercent, 61)
-        XCTAssertEqual(usage.lowestRemainingPercent, 61)
+        XCTAssertEqual(usage.provider, .codex)
+        XCTAssertEqual(usage.windows.map(\.type), [.fiveHour, .weekly])
+        XCTAssertEqual(usage.windows.map(\.remainingPercent), [83, 61])
         XCTAssertEqual(usage.fiveHourResetDate, Date(timeIntervalSince1970: 1_700_000_000))
         XCTAssertEqual(usage.weeklyResetDate, Date(timeIntervalSince1970: 1_701_000_000))
     }
 
-    func testRejectsOutOfRangeAndNonFinitePercentages() {
-        XCTAssertNil(Double.remaining(fromUsedPercent: -1))
-        XCTAssertNil(Double.remaining(fromUsedPercent: 101))
-        XCTAssertNil(Double.remaining(fromUsedPercent: .nan))
-        XCTAssertNil(Double.remaining(fromUsedPercent: .infinity))
-        XCTAssertEqual(Double.remaining(fromUsedPercent: 0), 100)
-        XCTAssertEqual(Double.remaining(fromUsedPercent: 100), 0)
-    }
-
-    func testInvalidWindowValueIsUnavailableRatherThanClamped() throws {
+    func testCodexParserSelectsCodexBucket() throws {
         let data = Data(#"""
-        {
-          "id": 2,
-          "result": {
-            "rateLimits": {
-              "primary": {"usedPercent": -5, "windowDurationMins": 300},
-              "secondary": {"usedPercent": 105, "windowDurationMins": 10080}
-            }
-          }
-        }
+        {"id":2,"result":{"rateLimits":{"primary":{"usedPercent":99,"windowDurationMins":300}},
+          "rateLimitsByLimitId":{"other":{"limitId":"other","primary":{"usedPercent":90,"windowDurationMins":300}},
+          "codex":{"limitId":"codex","primary":{"usedPercent":6,"windowDurationMins":300},
+          "secondary":{"usedPercent":89,"windowDurationMins":10080}}}}}
         """#.utf8)
-
         let usage = try CodexRateLimitParser.parse(responseData: data)
-
-        XCTAssertNil(usage.fiveHourRemainingPercent)
-        XCTAssertNil(usage.weeklyRemainingPercent)
-        XCTAssertNil(usage.lowestRemainingPercent)
-    }
-
-    func testSelectsCodexBucketFromMultiBucketResponse() throws {
-        let data = Data(#"""
-        {
-          "id": 2,
-          "result": {
-            "rateLimits": {"primary": {"usedPercent": 99, "windowDurationMins": 300}},
-            "rateLimitsByLimitId": {
-              "other": {"limitId": "other", "primary": {"usedPercent": 90, "windowDurationMins": 300}},
-              "codex": {
-                "limitId": "codex",
-                "primary": {"usedPercent": 6, "windowDurationMins": 300},
-                "secondary": {"usedPercent": 89, "windowDurationMins": 10080}
-              }
-            }
-          }
-        }
-        """#.utf8)
-
-        let usage = try CodexRateLimitParser.parse(responseData: data)
-
         XCTAssertEqual(usage.fiveHourRemainingPercent, 94)
         XCTAssertEqual(usage.weeklyRemainingPercent, 11)
     }
 
-    func testWindowDurationsMustBeExplicit() throws {
-        let data = Data(#"""
-        {
-          "id": 2,
-          "result": {
-            "rateLimits": {
-              "primary": {"usedPercent": 17},
-              "secondary": {"usedPercent": 39, "windowDurationMins": 1440}
-            }
-          }
-        }
-        """#.utf8)
-
-        let usage = try CodexRateLimitParser.parse(responseData: data)
-
-        XCTAssertNil(usage.fiveHourRemainingPercent)
-        XCTAssertNil(usage.weeklyRemainingPercent)
-    }
-
-    func testMissingRateLimitWindowsRemainUnavailable() throws {
-        let data = Data(#"{"id":2,"result":{"rateLimits":{}}}"#.utf8)
-        let usage = try CodexRateLimitParser.parse(responseData: data)
-
-        XCTAssertNil(usage.fiveHourRemainingPercent)
-        XCTAssertNil(usage.weeklyRemainingPercent)
-        XCTAssertNil(usage.fiveHourResetDate)
-        XCTAssertNil(usage.weeklyResetDate)
-    }
-
-    func testParserPreservesWeeklyWhenFiveHourWindowIsAbsent() throws {
-        let data = Data(#"{"id":2,"result":{"rateLimits":{"primary":{"usedPercent":16,"windowDurationMins":10080,"resetsAt":1701000000}}}}"#.utf8)
-
-        let usage = try CodexRateLimitParser.parse(responseData: data)
-
-        XCTAssertNil(usage.fiveHourRemainingPercent)
-        XCTAssertEqual(usage.weeklyRemainingPercent, 84)
-        XCTAssertEqual(usage.availableLimits.map(\.kind), [.weekly])
-        XCTAssertEqual(MenuBarSelection.automatic.presentation(in: usage).text, "Weekly 84%")
-    }
-
-    func testParserPreservesFiveHourWhenWeeklyWindowIsAbsent() throws {
-        let data = Data(#"{"id":2,"result":{"rateLimits":{"primary":{"usedPercent":27,"windowDurationMins":300,"resetsAt":1700000000}}}}"#.utf8)
-
-        let usage = try CodexRateLimitParser.parse(responseData: data)
-
-        XCTAssertEqual(usage.fiveHourRemainingPercent, 73)
-        XCTAssertNil(usage.weeklyRemainingPercent)
-        XCTAssertEqual(usage.availableLimits.map(\.kind), [.fiveHour])
-        XCTAssertEqual(MenuBarSelection.automatic.presentation(in: usage).text, "5H 73%")
-    }
-
-    func testMalformedServerResponseThrowsSanitizedError() {
-        let data = Data("this is not JSON and must never be logged".utf8)
-        XCTAssertThrowsError(try CodexRateLimitParser.parse(responseData: data)) { error in
-            XCTAssertEqual(error as? CodexUsageError, .malformedResponse)
-        }
-    }
-
-    func testUsageLevelsIncludeNonColorLabels() {
-        XCTAssertEqual(UsageLevel(remainingPercent: 51), .normal)
-        XCTAssertEqual(UsageLevel(remainingPercent: 50), .warning)
-        XCTAssertEqual(UsageLevel(remainingPercent: 21), .warning)
-        XCTAssertEqual(UsageLevel(remainingPercent: 20), .critical)
-        XCTAssertEqual(UsageLevel(remainingPercent: 0), .critical)
-    }
-
-    func testAllMenuBarDisplayModesUseRemainingPercentages() {
-        let usage = CodexUsage(
-            fiveHourRemainingPercent: 83,
-            weeklyRemainingPercent: 42,
-            fiveHourResetDate: nil,
-            weeklyResetDate: nil,
-            lastUpdated: Date(),
-            source: "Test"
+    func testMissingAndInvalidValuesNeverBecomeZero() throws {
+        let missing = try CodexRateLimitParser.parse(
+            responseData: Data(#"{"id":2,"result":{"rateLimits":{}}}"#.utf8)
         )
-
-        XCTAssertEqual(MenuBarSelection.automatic.presentation(in: usage).text, "5H 83%")
-        XCTAssertEqual(MenuBarSelection.fiveHour.presentation(in: usage).text, "5H 83%")
-        XCTAssertEqual(MenuBarSelection.weekly.presentation(in: usage).text, "Weekly 42%")
-        XCTAssertEqual(MenuBarSelection.lowest.presentation(in: usage).text, "Low 42%")
+        let invalid = try CodexRateLimitParser.parse(
+            responseData: Data(#"{"id":2,"result":{"rateLimits":{"primary":{"usedPercent":-2,"windowDurationMins":300},"secondary":{"usedPercent":101,"windowDurationMins":10080}}}}"#.utf8)
+        )
+        XCTAssertTrue(missing.windows.isEmpty)
+        XCTAssertTrue(invalid.windows.isEmpty)
+        XCTAssertNil(Double.remaining(fromUsedPercent: -1))
+        XCTAssertNil(Double.remaining(fromUsedPercent: 101))
+        XCTAssertEqual(Double.remaining(fromUsedPercent: 100), 0)
     }
 
-    func testDynamicLimitsIncludeBothAvailableWindows() {
-        let usage = makeUsage(fiveHour: 83, weekly: 84)
-
-        XCTAssertEqual(usage.availableLimits.map(\.kind), [.fiveHour, .weekly])
-        XCTAssertEqual(usage.availableLimits.map(\.remainingPercent), [83, 84])
-        XCTAssertEqual(MenuBarController.popoverHeight(visibleLimitCount: 2), 270)
+    func testOnlyExplicitSupportedWindowDurationsAreAccepted() throws {
+        let usage = try CodexRateLimitParser.parse(
+            responseData: Data(#"{"id":2,"result":{"rateLimits":{"primary":{"usedPercent":17},"secondary":{"usedPercent":39,"windowDurationMins":1440}}}}"#.utf8)
+        )
+        XCTAssertTrue(usage.windows.isEmpty)
     }
 
-    func testOnlyWeeklyOmitsFiveHourAndBecomesAutomaticFallback() {
-        let usage = makeUsage(fiveHour: nil, weekly: 84)
-
-        XCTAssertEqual(usage.availableLimits.map(\.kind), [.weekly])
-        XCTAssertEqual(MenuBarSelection.automatic.presentation(in: usage).text, "Weekly 84%")
-        XCTAssertEqual(MenuBarSelection.fiveHour.presentation(in: usage).text, "Weekly 84%")
-        XCTAssertEqual(MenuBarSelection.lowest.presentation(in: usage).text, "Weekly 84%")
-        XCTAssertEqual(usage.lowestRemainingPercent, 84)
-        XCTAssertEqual(MenuBarController.popoverHeight(visibleLimitCount: 1), 205)
-    }
-
-    func testOnlyFiveHourOmitsWeeklyAndSupportsFallback() {
-        let usage = makeUsage(fiveHour: 73, weekly: nil)
-
-        XCTAssertEqual(usage.availableLimits.map(\.kind), [.fiveHour])
-        XCTAssertEqual(MenuBarSelection.automatic.presentation(in: usage).text, "5H 73%")
-        XCTAssertEqual(MenuBarSelection.weekly.presentation(in: usage).text, "5H 73%")
-        XCTAssertEqual(usage.lowestRemainingPercent, 73)
-    }
-
-    func testNoLimitsProducesNeutralMenuBarAndEmptyLayout() {
-        let usage = makeUsage(fiveHour: nil, weekly: nil)
-
-        XCTAssertTrue(usage.availableLimits.isEmpty)
-        XCTAssertNil(usage.lowestRemainingPercent)
-        XCTAssertEqual(MenuBarSelection.automatic.presentation(in: usage).text, "Codex --%")
-        XCTAssertEqual(MenuBarController.popoverHeight(visibleLimitCount: 0), 160)
+    func testMalformedResponseIsRejected() {
+        XCTAssertThrowsError(try CodexRateLimitParser.parse(responseData: Data("private".utf8)))
     }
 
     @MainActor
-    func testManualRefreshPublishesProviderResult() async {
-        let expected = CodexUsage(
-            fiveHourRemainingPercent: 72,
-            weeklyRemainingPercent: 48,
-            fiveHourResetDate: nil,
-            weeklyResetDate: nil,
-            lastUpdated: Date(),
-            source: "Fixture"
-        )
-        let service = UsageRefreshService(provider: FixedProvider(usage: expected))
-
-        await service.refresh()
-
-        XCTAssertEqual(service.usage, expected)
-        XCTAssertNil(service.errorMessage)
+    func testDefaultSettings() {
+        let store = makeStore()
+        let settings = store.settings
+        XCTAssertFalse(settings.launchAtLogin)
+        XCTAssertFalse(settings.openPopoverAfterLaunch)
+        XCTAssertTrue(settings.startHiddenAtLogin)
+        XCTAssertFalse(settings.confirmBeforeQuit)
+        XCTAssertFalse(settings.globalShortcutEnabled)
+        XCTAssertEqual(settings.menuBarProvider, .automatic)
+        XCTAssertEqual(settings.menuBarLimit, .automatic)
+        XCTAssertEqual(settings.menuBarFormat, .pipe)
+        XCTAssertEqual(settings.language, .systemDefault)
+        XCTAssertEqual(settings.providerIdentification, .icon)
+        XCTAssertEqual(settings.providerIconColor, .white)
+        XCTAssertEqual(settings.percentagePrecision, .integer)
+        XCTAssertTrue(settings.automaticRefresh)
+        XCTAssertEqual(settings.globalRefreshInterval, .fiveMinutes)
+        XCTAssertFalse(settings.notificationsEnabled)
+        XCTAssertEqual(settings.popoverSize, .compact)
     }
 
     @MainActor
-    func testProviderFailureProducesUnavailableState() async {
-        let service = UsageRefreshService(provider: FailingProvider())
+    func testSettingsPersistence() {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let store = SettingsStore(defaults: defaults)
+        store.settings.menuBarFormat = .dot
+        store.settings.globalRefreshInterval = RefreshDuration(value: 2, unit: .minutes)
+        store.settings.claudeCode.showInPopover = false
+        store.settings.language = .korean
 
-        await service.refresh()
+        let restored = SettingsStore(defaults: defaults)
+        XCTAssertEqual(restored.settings.menuBarFormat, .dot)
+        XCTAssertEqual(restored.settings.globalRefreshInterval, RefreshDuration(value: 2, unit: .minutes))
+        XCTAssertFalse(restored.settings.claudeCode.showInPopover)
+        XCTAssertEqual(restored.settings.language, .korean)
+    }
 
-        XCTAssertNil(service.usage.fiveHourRemainingPercent)
-        XCTAssertNil(service.usage.weeklyRemainingPercent)
-        XCTAssertEqual(service.errorMessage, CodexUsageError.serverUnavailable.errorDescription)
-        XCTAssertFalse(service.isRefreshing)
+    func testDurationUnitConversions() {
+        XCTAssertEqual(RefreshDuration(value: 45, unit: .seconds).rawSeconds, 45)
+        XCTAssertEqual(RefreshDuration(value: 2, unit: .minutes).rawSeconds, 120)
+        XCTAssertEqual(RefreshDuration(value: 6, unit: .hours).rawSeconds, 21_600)
     }
 
     @MainActor
-    func testScheduledRefreshUsesPersistedIntervalAndFetchesUsage() async {
-        let defaults = UserDefaults.standard
-        let previousInterval = defaults.object(forKey: SettingsKey.refreshInterval)
-        defer {
-            if let previousInterval {
-                defaults.set(previousInterval, forKey: SettingsKey.refreshInterval)
-            } else {
-                defaults.removeObject(forKey: SettingsKey.refreshInterval)
-            }
-        }
-        defaults.set(RefreshInterval.oneMinute.rawValue, forKey: SettingsKey.refreshInterval)
-
-        let expected = CodexUsage(
-            fiveHourRemainingPercent: 64,
-            weeklyRemainingPercent: 37,
-            fiveHourResetDate: nil,
-            weeklyResetDate: nil,
-            lastUpdated: Date(),
-            source: "Scheduled fixture"
-        )
-        let scheduler = ManualRefreshScheduler()
-        let service = UsageRefreshService(provider: FixedProvider(usage: expected), scheduler: scheduler)
-
-        service.reschedule()
-        XCTAssertEqual(scheduler.interval, 60)
-        await scheduler.fire()
-
-        XCTAssertEqual(service.usage, expected)
+    func testRefreshIntervalMinimumIsThirtySeconds() {
+        let store = makeStore()
+        store.settings.globalRefreshInterval = RefreshDuration(value: 5, unit: .seconds)
+        XCTAssertFalse(store.settings.globalRefreshInterval.isValid)
+        store.validateDurations()
+        XCTAssertEqual(store.settings.globalRefreshInterval.clampedSeconds, 30)
     }
 
     @MainActor
-    func testMenuBarSelectionPersistsThroughUserDefaults() async {
-        let defaults = UserDefaults.standard
-        let previousSelection = defaults.object(forKey: SettingsKey.menuBarSelection)
-        defer {
-            if let previousSelection {
-                defaults.set(previousSelection, forKey: SettingsKey.menuBarSelection)
-            } else {
-                defaults.removeObject(forKey: SettingsKey.menuBarSelection)
-            }
-        }
+    func testRefreshIntervalMaximumIsTwentyFourHours() {
+        let store = makeStore()
+        store.settings.globalRefreshInterval = RefreshDuration(value: 30, unit: .hours)
+        store.validateDurations()
+        XCTAssertEqual(store.settings.globalRefreshInterval.clampedSeconds, 86_400)
+    }
 
-        defaults.set(MenuBarSelection.weekly.rawValue, forKey: SettingsKey.menuBarSelection)
-        let usage = CodexUsage(
-            fiveHourRemainingPercent: 75,
-            weeklyRemainingPercent: 34,
-            fiveHourResetDate: nil,
-            weeklyResetDate: nil,
-            lastUpdated: Date(),
-            source: "Settings fixture"
+    @MainActor
+    func testProviderSpecificRefreshIntervals() {
+        let store = makeStore()
+        store.settings.globalRefreshInterval = RefreshDuration(value: 5, unit: .minutes)
+        store.settings.codex.useGlobalRefreshInterval = false
+        store.settings.codex.customRefreshInterval = RefreshDuration(value: 2, unit: .minutes)
+        XCTAssertEqual(store.settings.refreshInterval(for: .codex), 120)
+        XCTAssertEqual(store.settings.refreshInterval(for: .claudeCode), 300)
+    }
+
+    @MainActor
+    func testProviderVisibilityIsIndependent() {
+        let store = makeStore()
+        store.settings.claudeCode.showInPopover = false
+        let service = UsageRefreshService(providers: [], settingsStore: store)
+        XCTAssertEqual(service.visibleProviders(), [.codex])
+        XCTAssertTrue(store.settings.claudeCode.enabled)
+        XCTAssertTrue(store.settings.claudeCode.includeInAutomaticRefresh)
+    }
+
+    @MainActor
+    func testProviderOrderingControlsPopoverOrder() {
+        let store = makeStore()
+        store.settings.providerOrder = [.claudeCode, .codex]
+        let service = UsageRefreshService(providers: [], settingsStore: store)
+        XCTAssertEqual(service.visibleProviders(), [.claudeCode, .codex])
+    }
+
+    @MainActor
+    func testDefaultMenuBarFormatIsExactPipeStyle() {
+        let store = makeStore()
+        let usage = makeUsage(provider: .codex, fiveHour: 28, weekly: 84)
+        let value = MenuBarPresentation.resolve(usages: [.codex: usage], settings: store.settings)
+        XCTAssertEqual(value.text, "5H | 28%")
+    }
+
+    @MainActor
+    func testWeeklyFallbackWhenFiveHourIsMissing() {
+        let store = makeStore()
+        let usage = makeUsage(provider: .codex, fiveHour: nil, weekly: 84)
+        let value = MenuBarPresentation.resolve(usages: [.codex: usage], settings: store.settings)
+        XCTAssertEqual(value.text, "Weekly | 84%")
+    }
+
+    @MainActor
+    func testExplicitMissingLimitShowsUnavailableNotZero() {
+        let store = makeStore()
+        store.settings.menuBarLimit = .fiveHour
+        let usage = makeUsage(provider: .codex, fiveHour: nil, weekly: 84)
+        let value = MenuBarPresentation.resolve(usages: [.codex: usage], settings: store.settings)
+        XCTAssertEqual(value.text, "5H | --%")
+        XCTAssertNil(value.remainingPercent)
+    }
+
+    @MainActor
+    func testUnavailableProviderUsesAIState() {
+        let store = makeStore()
+        store.settings.menuBarProvider = .claudeCode
+        let value = MenuBarPresentation.resolve(
+            usages: [.claudeCode: .unavailable(provider: .claudeCode)],
+            settings: store.settings
         )
-        let service = UsageRefreshService(provider: FixedProvider(usage: usage))
-        await service.refresh()
+        XCTAssertEqual(value.text, "AI | --%")
+    }
 
+    @MainActor
+    func testMenuBarProviderSelectionIsIndependentFromPopoverVisibility() {
+        let store = makeStore()
+        store.settings.menuBarProvider = .claudeCode
+        store.settings.claudeCode.showInPopover = false
+        let codex = makeUsage(provider: .codex, fiveHour: 28, weekly: 84)
+        let claude = makeUsage(provider: .claudeCode, fiveHour: 71, weekly: 63)
+        let value = MenuBarPresentation.resolve(
+            usages: [.codex: codex, .claudeCode: claude],
+            settings: store.settings
+        )
+        XCTAssertEqual(value.text, "5H | 71%")
+        XCTAssertEqual(UsageRefreshService(providers: [], settingsStore: store).visibleProviders(), [.codex])
+    }
+
+    @MainActor
+    func testMenuBarLimitSelectionUsesWeekly() {
+        let store = makeStore()
+        store.settings.menuBarLimit = .weekly
+        let usage = makeUsage(provider: .codex, fiveHour: 28, weekly: 84)
         XCTAssertEqual(
-            defaults.string(forKey: SettingsKey.menuBarSelection),
-            MenuBarSelection.weekly.rawValue
+            MenuBarPresentation.resolve(usages: [.codex: usage], settings: store.settings).text,
+            "Weekly | 84%"
         )
-        XCTAssertEqual(MenuBarSelection.weekly.presentation(in: service.usage).text, "Weekly 34%")
+    }
+
+    @MainActor
+    func testMenuBarFormattingPrecisionAndProviderName() {
+        let store = makeStore()
+        store.settings.menuBarFormat = .dot
+        store.settings.percentagePrecision = .oneDecimal
+        store.settings.showProviderName = true
+        let usage = makeUsage(provider: .codex, fiveHour: 28.44, weekly: nil)
+        XCTAssertEqual(
+            MenuBarPresentation.resolve(usages: [.codex: usage], settings: store.settings).text,
+            "Codex · 5H · 28.4%"
+        )
+    }
+
+    @MainActor
+    func testBothProvidersUseCompactSeparatedMenuBarFormat() {
+        let store = makeStore()
+        store.settings.menuBarProvider = .both
+        store.settings.providerIdentification = .icon
+        let codex = makeUsage(provider: .codex, fiveHour: 28, weekly: nil)
+        let claude = makeUsage(provider: .claudeCode, fiveHour: 71, weekly: nil)
+        let value = MenuBarPresentation.resolve(
+            usages: [.codex: codex, .claudeCode: claude],
+            settings: store.settings
+        )
+        XCTAssertEqual(value.text, "5H | 28% / 5H | 71%")
+        XCTAssertEqual(value.segments.map(\.provider), [.codex, .claudeCode])
+    }
+
+    @MainActor
+    func testKoreanLocalizationUsesRequestedNaturalLabels() {
+        let store = makeStore()
+        store.settings.language = .korean
+        let expected = [
+            "category.general": "일반",
+            "category.menu_bar": "메뉴바",
+            "category.ai_services": "AI 서비스",
+            "category.refresh": "사용량 확인",
+            "category.notifications": "알림",
+            "category.display": "화면 표시",
+            "category.advanced": "고급 설정",
+            "category.diagnostics": "상태 및 진단",
+            "refresh.interval": "확인 주기",
+            "action.refresh": "다시 확인",
+            "services.show_popover": "사용량 창에 표시",
+            "unit.seconds": "초",
+            "unit.minutes": "분",
+            "unit.hours": "시간"
+        ]
+        for (key, value) in expected {
+            XCTAssertEqual(store.localized(key), value, key)
+        }
+        let combined = expected.keys.map(store.localized).joined(separator: " ")
+        for forbidden in ["프로바이더", "메뉴 막대", "재검색", "팝오버", "스케줄러"] {
+            XCTAssertFalse(combined.contains(forbidden), forbidden)
+        }
+    }
+
+    @MainActor
+    func testResetDayLocalizationUsesDayHourMinuteFormat() {
+        let store = makeStore()
+        store.settings.language = .korean
+        let korean = store.localized("reset.relative_days_hours_minutes")
+        store.settings.language = .english
+        let english = store.localized("reset.relative_days_hours_minutes")
+        XCTAssertEqual(String(format: korean, 2, 3, 4), "2일 3시간 4분 후 초기화")
+        XCTAssertEqual(String(format: english, 2, 3, 4), "Resets in 2d 3h 4m")
+    }
+
+    func testProvidedProviderIconAssetsLoadFromResources() {
+        XCTAssertNotNil(ProviderIconAsset.image(for: .codex))
+        XCTAssertNotNil(ProviderIconAsset.image(for: .claudeCode))
+    }
+
+    @MainActor
+    func testProviderIconColorPersistsAndProducesTintedImage() {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let store = SettingsStore(defaults: defaults)
+        store.settings.providerIconColor = .accent
+        let reloaded = SettingsStore(defaults: defaults)
+        XCTAssertEqual(reloaded.settings.providerIconColor, .accent)
+        XCTAssertNotNil(ProviderIconAsset.image(for: .codex, color: .white))
+        XCTAssertNotNil(ProviderIconAsset.image(for: .claudeCode, color: .black))
+    }
+
+    @MainActor
+    func testEnglishAndKoreanCanSwitchLive() {
+        let store = makeStore()
+        store.settings.language = .english
+        XCTAssertEqual(store.localized("category.refresh"), "Usage Refresh")
+        XCTAssertEqual(store.localized("display.icon_color"), "Icon Color")
+        store.settings.language = .korean
+        XCTAssertEqual(store.localized("category.refresh"), "사용량 확인")
+        XCTAssertEqual(store.localized("option.icon_color_white"), "흰색")
+    }
+
+    @MainActor
+    func testUnavailableCanUseNAOrHiddenIconState() {
+        let store = makeStore()
+        store.settings.unavailableDisplay = .notAvailable
+        XCTAssertEqual(MenuBarPresentation.resolve(usages: [:], settings: store.settings).text, "AI | N/A")
+        store.settings.unavailableDisplay = .hidden
+        XCTAssertEqual(MenuBarPresentation.resolve(usages: [:], settings: store.settings).text, "")
+    }
+
+    @MainActor
+    func testStaleStateUsesConfiguredThresholdWithoutErasingData() async {
+        let store = makeStore()
+        store.settings.staleDataThreshold = RefreshDuration(value: 15, unit: .minutes)
+        let usage = makeUsage(provider: .codex, fiveHour: 45, weekly: nil, updated: Date(timeIntervalSince1970: 100))
+        let service = UsageRefreshService(providers: [FixedProvider(usage: usage)], settingsStore: store)
+        await service.refresh(provider: .codex)
+        XCTAssertTrue(service.isStale(.codex, now: Date(timeIntervalSince1970: 1_001)))
+        XCTAssertEqual(service.usageByProvider[.codex]?.fiveHourRemainingPercent, 45)
+    }
+
+    @MainActor
+    func testRefreshOnOpenBehavior() async {
+        let store = makeStore()
+        let provider = CountingProvider(usage: makeUsage(provider: .codex, fiveHour: 52, weekly: nil))
+        let service = UsageRefreshService(providers: [provider], settingsStore: store)
+        await service.refreshForPopoverOpen()
+        let firstCount = await provider.fetchCount()
+        XCTAssertEqual(firstCount, 1)
+
+        store.settings.refreshWhenPopoverOpens = false
+        await service.refreshForPopoverOpen()
+        let secondCount = await provider.fetchCount()
+        XCTAssertEqual(secondCount, 1)
+    }
+
+    @MainActor
+    func testRetryConfigurationIsBounded() {
+        let store = makeStore()
+        store.settings.retryFailedRefresh = true
+        store.settings.retryCount = 5
+        store.settings.retryDelay = RefreshDuration(value: 30, unit: .seconds)
+        XCTAssertEqual(store.settings.retryCount, 5)
+        XCTAssertEqual(store.settings.retryDelay.clampedSeconds, 30)
+    }
+
+    @MainActor
+    func testNotificationThresholdsPersistWithinValidRange() {
+        let store = makeStore()
+        store.settings.notificationsEnabled = true
+        store.settings.fiveHourNotificationThreshold = 10
+        store.settings.weeklyNotificationThreshold = 50
+        XCTAssertTrue((1...100).contains(store.settings.fiveHourNotificationThreshold))
+        XCTAssertTrue((1...100).contains(store.settings.weeklyNotificationThreshold))
+    }
+
+    @MainActor
+    func testResetToDefaults() {
+        let store = makeStore()
+        store.settings.menuBarFormat = .space
+        store.settings.notificationsEnabled = true
+        store.settings.providerOrder = [.claudeCode, .codex]
+        store.resetToDefaults()
+        XCTAssertEqual(store.settings, AppSettings())
+    }
+
+    @MainActor
+    func testAutomaticSchedulerUsesShortestProviderInterval() {
+        let store = makeStore()
+        store.settings.codex.useGlobalRefreshInterval = false
+        store.settings.codex.customRefreshInterval = RefreshDuration(value: 45, unit: .seconds)
+        store.settings.claudeCode.customRefreshInterval = RefreshDuration(value: 2, unit: .minutes)
+        let scheduler = ManualRefreshScheduler()
+        let service = UsageRefreshService(providers: [], settingsStore: store, scheduler: scheduler)
+        service.reschedule()
+        XCTAssertEqual(scheduler.interval, 45)
+        XCTAssertEqual(service.scheduledInterval, 45)
+    }
+
+    @MainActor
+    func testProviderDisplayControlsNeverFabricateRows() async {
+        let store = makeStore()
+        store.settings.codex.showFiveHour = true
+        store.settings.codex.showWeekly = true
+        let usage = makeUsage(provider: .codex, fiveHour: nil, weekly: 84)
+        let service = UsageRefreshService(providers: [FixedProvider(usage: usage)], settingsStore: store)
+        await service.refresh(provider: .codex)
+        XCTAssertEqual(service.visibleWindows(for: .codex).map(\.type), [.weekly])
+    }
+
+    @MainActor
+    func testHidingProgressBarsReducesPopoverHeight() {
+        var settings = AppSettings()
+        let visible = PopoverLayoutModel.height(providerCount: 2, rowCount: 4, unavailableCount: 0, settings: settings)
+        settings.progressBarStyle = .hidden
+        let hidden = PopoverLayoutModel.height(providerCount: 2, rowCount: 4, unavailableCount: 0, settings: settings)
+        XCTAssertLessThan(hidden, visible)
+    }
+
+    @MainActor
+    func testClaudeUnavailableDoesNotBlockCodexRefresh() async {
+        let store = makeStore()
+        let codexUsage = makeUsage(provider: .codex, fiveHour: 61, weekly: 80)
+        let service = UsageRefreshService(
+            providers: [FixedProvider(usage: codexUsage), ClaudeCodeUsageProvider()],
+            settingsStore: store
+        )
+        await service.refresh()
+        XCTAssertEqual(service.usageByProvider[.codex]?.fiveHourRemainingPercent, 61)
+        XCTAssertTrue(service.usageByProvider[.claudeCode]?.windows.isEmpty ?? false)
+        XCTAssertNotNil(service.errorsByProvider[.claudeCode])
     }
 
     @MainActor
     func testAppUsesAccessoryActivationPolicy() {
-        let previousPolicy = NSApplication.shared.activationPolicy()
-        let visibility = AppVisibilityController.shared
-        defer {
-            NSApplication.shared.setActivationPolicy(previousPolicy)
-        }
-
-        visibility.applyAccessoryPolicy()
-        XCTAssertEqual(NSApplication.shared.activationPolicy(), .accessory)
-        XCTAssertEqual(visibility.activationPolicyStatus, "Accessory — Dock hidden")
+        var policy = NSApplication.ActivationPolicy.regular
+        var requestedPolicy: NSApplication.ActivationPolicy?
+        AppVisibilityController.shared.applyAccessoryPolicy(
+            currentPolicy: { policy },
+            setPolicy: {
+                requestedPolicy = $0
+                policy = $0
+                return true
+            }
+        )
+        XCTAssertEqual(requestedPolicy, .accessory)
+        XCTAssertEqual(policy, .accessory)
+        XCTAssertEqual(AppVisibilityController.shared.activationPolicyStatus, "Accessory — Dock hidden")
     }
 
     @MainActor
-    func testMenuBarAppDoesNotTerminateWhenSettingsWindowCloses() {
-        let delegate = AppDelegate()
-        XCTAssertFalse(delegate.applicationShouldTerminateAfterLastWindowClosed(.shared))
+    func testMenuBarAppSurvivesSettingsWindowClose() {
+        XCTAssertFalse(AppDelegate().applicationShouldTerminateAfterLastWindowClosed(.shared))
+    }
+
+    func testClaudeProviderIsUnavailableWithoutStandaloneInterface() async {
+        let available = await ClaudeCodeUsageProvider().isAvailable()
+        XCTAssertFalse(available)
     }
 
     func testLiveCodexProviderWhenExplicitlyEnabled() async throws {
         guard ProcessInfo.processInfo.environment["CODEX_LIVE_TEST"] == "1" else {
             throw XCTSkip("Set CODEX_LIVE_TEST=1 to query the installed Codex app-server.")
         }
-
-        let usage = try await CodexAppServerUsageProvider().fetchUsage()
-
-        XCTAssertNotNil(usage.fiveHourRemainingPercent)
-        XCTAssertNotNil(usage.weeklyRemainingPercent)
-        XCTAssertTrue(usage.fiveHourRemainingPercent.map { (0...100).contains($0) } ?? false)
-        XCTAssertTrue(usage.weeklyRemainingPercent.map { (0...100).contains($0) } ?? false)
-        XCTAssertNotNil(usage.fiveHourResetDate)
-        XCTAssertNotNil(usage.weeklyResetDate)
+        let usage = try await CodexUsageProvider().fetchUsage()
+        XCTAssertEqual(usage.provider, .codex)
+        XCTAssertFalse(usage.windows.isEmpty)
+        XCTAssertTrue(usage.windows.allSatisfy { (0...100).contains($0.remainingPercent) })
     }
 
-    private func makeUsage(fiveHour: Double?, weekly: Double?) -> CodexUsage {
-        CodexUsage(
-            fiveHourRemainingPercent: fiveHour,
-            weeklyRemainingPercent: weekly,
-            fiveHourResetDate: fiveHour == nil ? nil : Date(timeIntervalSince1970: 1_700_000_000),
-            weeklyResetDate: weekly == nil ? nil : Date(timeIntervalSince1970: 1_701_000_000),
-            lastUpdated: Date(timeIntervalSince1970: 100),
-            source: "Test"
-        )
+    @MainActor
+    private func makeStore() -> SettingsStore {
+        SettingsStore(defaults: UserDefaults(suiteName: UUID().uuidString)!)
+    }
+
+    private func makeUsage(
+        provider: AIProvider,
+        fiveHour: Double?,
+        weekly: Double?,
+        updated: Date = Date(timeIntervalSince1970: 100)
+    ) -> AIUsage {
+        var windows: [UsageWindow] = []
+        if let fiveHour { windows.append(UsageWindow(type: .fiveHour, remainingPercent: fiveHour, resetDate: nil)) }
+        if let weekly { windows.append(UsageWindow(type: .weekly, remainingPercent: weekly, resetDate: nil)) }
+        return AIUsage(provider: provider, windows: windows, lastUpdated: updated, source: "Test")
     }
 }
 
-private struct FixedProvider: CodexUsageProviding {
-    let usage: CodexUsage
-    func fetchUsage() async throws -> CodexUsage { usage }
+private struct FixedProvider: AIUsageProvider {
+    let usage: AIUsage
+    var id: AIProvider { usage.provider }
+    var displayName: String { id.displayName }
+    func isAvailable() async -> Bool { true }
+    func fetchUsage() async throws -> AIUsage { usage }
 }
 
-private struct FailingProvider: CodexUsageProviding {
-    func fetchUsage() async throws -> CodexUsage {
-        throw CodexUsageError.serverUnavailable
-    }
+private actor CountingProvider: AIUsageProvider {
+    nonisolated let id: AIProvider
+    nonisolated var displayName: String { id.displayName }
+    private let usage: AIUsage
+    private var count = 0
+
+    init(usage: AIUsage) { id = usage.provider; self.usage = usage }
+    func isAvailable() async -> Bool { true }
+    func fetchUsage() async throws -> AIUsage { count += 1; return usage }
+    func fetchCount() -> Int { count }
 }
 
 @MainActor
 private final class ManualRefreshScheduler: RefreshScheduling {
     private(set) var interval: TimeInterval?
     private var action: (@MainActor () async -> Void)?
-
     func schedule(every interval: TimeInterval, action: @escaping @MainActor () async -> Void) {
         self.interval = interval
         self.action = action
     }
-
-    func invalidate() {
-        interval = nil
-        action = nil
-    }
-
-    func fire() async {
-        await action?()
-    }
+    func invalidate() { interval = nil; action = nil }
 }

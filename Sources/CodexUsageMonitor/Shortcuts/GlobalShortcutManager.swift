@@ -6,12 +6,17 @@ final class GlobalShortcutManager {
     private var hotKeyReference: EventHotKeyRef?
     private var eventHandlerReference: EventHandlerRef?
     private(set) var isRegistered = false
+    private var selectedKey = ShortcutKey.c
 
     deinit {
         unregister()
     }
 
-    func setEnabled(_ enabled: Bool) {
+    func setEnabled(_ enabled: Bool, key: ShortcutKey) {
+        if key != selectedKey {
+            unregister()
+            selectedKey = key
+        }
         enabled ? register() : unregister()
     }
 
@@ -43,7 +48,7 @@ final class GlobalShortcutManager {
         let identifier = EventHotKeyID(signature: 0x4344_5855, id: 1) // CDXU
         let modifiers = UInt32(controlKey | optionKey)
         let registrationStatus = RegisterEventHotKey(
-            UInt32(kVK_ANSI_C),
+            keyCode,
             modifiers,
             identifier,
             GetApplicationEventTarget(),
@@ -55,6 +60,14 @@ final class GlobalShortcutManager {
         if !isRegistered, let eventHandlerReference {
             RemoveEventHandler(eventHandlerReference)
             self.eventHandlerReference = nil
+        }
+    }
+
+    private var keyCode: UInt32 {
+        switch selectedKey {
+        case .c: return UInt32(kVK_ANSI_C)
+        case .m: return UInt32(kVK_ANSI_M)
+        case .u: return UInt32(kVK_ANSI_U)
         }
     }
 

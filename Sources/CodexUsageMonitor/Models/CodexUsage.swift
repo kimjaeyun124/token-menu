@@ -1,117 +1,240 @@
 import Foundation
 
-struct CodexUsage: Equatable, Sendable {
-    let fiveHourRemainingPercent: Double?
-    let weeklyRemainingPercent: Double?
-    let fiveHourResetDate: Date?
-    let weeklyResetDate: Date?
-    let lastUpdated: Date
-    let source: String
+enum AIProvider: String, CaseIterable, Identifiable, Codable, Sendable {
+    case codex
+    case claudeCode
 
-    var lowestRemainingPercent: Double? {
-        [fiveHourRemainingPercent, weeklyRemainingPercent].compactMap { $0 }.min()
-    }
+    var id: String { rawValue }
 
-    var availableLimits: [AvailableUsageLimit] {
-        var limits: [AvailableUsageLimit] = []
-        if let fiveHourRemainingPercent {
-            limits.append(AvailableUsageLimit(
-                kind: .fiveHour,
-                remainingPercent: fiveHourRemainingPercent,
-                resetDate: fiveHourResetDate
-            ))
+    var displayName: String {
+        switch self {
+        case .codex: return "Codex"
+        case .claudeCode: return "Claude Code"
         }
-        if let weeklyRemainingPercent {
-            limits.append(AvailableUsageLimit(
-                kind: .weekly,
-                remainingPercent: weeklyRemainingPercent,
-                resetDate: weeklyResetDate
-            ))
-        }
-        return limits
     }
 
-    static func unavailable(at date: Date = Date(), source: String = "Unavailable") -> CodexUsage {
-        CodexUsage(
-            fiveHourRemainingPercent: nil,
-            weeklyRemainingPercent: nil,
-            fiveHourResetDate: nil,
-            weeklyResetDate: nil,
-            lastUpdated: date,
-            source: source
-        )
-    }
+    var menuBarName: String { self == .codex ? "Codex" : "Claude" }
 }
 
-enum UsageWindowKind: String, Identifiable, Sendable {
+enum UsageWindowType: String, Identifiable, Sendable {
     case fiveHour
     case weekly
 
     var id: String { rawValue }
-    var title: String { self == .fiveHour ? "5H" : "Weekly" }
+    var displayName: String { self == .fiveHour ? "5-Hour" : "Weekly" }
+    var shortName: String { self == .fiveHour ? "5H" : "Weekly" }
 }
 
-struct AvailableUsageLimit: Identifiable, Equatable, Sendable {
-    let kind: UsageWindowKind
+struct UsageWindow: Identifiable, Equatable, Sendable {
+    let type: UsageWindowType
     let remainingPercent: Double
     let resetDate: Date?
 
-    var id: UsageWindowKind { kind }
+    var id: UsageWindowType { type }
+    var displayName: String { type.displayName }
+    var shortName: String { type.shortName }
+}
+
+struct AIUsage: Equatable, Sendable {
+    let provider: AIProvider
+    let windows: [UsageWindow]
+    let lastUpdated: Date
+    let source: String
+
+    func window(_ type: UsageWindowType) -> UsageWindow? {
+        windows.first { $0.type == type }
+    }
+
+    var fiveHourRemainingPercent: Double? { window(.fiveHour)?.remainingPercent }
+    var weeklyRemainingPercent: Double? { window(.weekly)?.remainingPercent }
+    var fiveHourResetDate: Date? { window(.fiveHour)?.resetDate }
+    var weeklyResetDate: Date? { window(.weekly)?.resetDate }
+    var lowestRemainingPercent: Double? { windows.map(\.remainingPercent).min() }
+
+    static func unavailable(
+        provider: AIProvider,
+        at date: Date = Date(),
+        source: String = "Unavailable"
+    ) -> AIUsage {
+        AIUsage(provider: provider, windows: [], lastUpdated: date, source: source)
+    }
 }
 
 struct MenuBarPresentation: Equatable, Sendable {
+    struct Segment: Equatable, Sendable {
+        let provider: AIProvider
+        let label: String
+        let remainingPercent: Double?
+        let text: String
+    }
+
+    let provider: AIProvider?
     let label: String
     let remainingPercent: Double?
+    let text: String
+    let segments: [Segment]
 
-    var text: String {
-        guard let remainingPercent else { return "Codex --%" }
-        return "\(label) \(remainingPercent.percentageText)"
-    }
-}
-
-enum MenuBarSelection: String, CaseIterable, Identifiable {
-    case automatic
-    case fiveHour
-    case weekly
-    case lowest
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .automatic: return "Automatic"
-        case .fiveHour: return "5-Hour %"
-        case .weekly: return "Weekly %"
-        case .lowest: return "Lowest %"
+    static func resolve(
+        usages: [AIProvider: AIUsage],
+        settings: AppSettings
+    ) -> MenuBarPresentation {
+        let enabledProviders = settings.providerOrder.filter {
+            settings.preferences(for: $0).enabled
         }
+        let selectedProviders: [AIProvider]
+        switch settings.menuBarProvider {
+        case .automatic:
+            selectedProviders = enabledProviders.first { !(usages[$0]?.windows.isEmpty ?? true) }
+                .map { [$0] } ?? Array(enabledProviders.prefix(1))
+        case .codex:
+            selectedProviders = settings.codex.enabled ? [.codex] : []
+        case .claudeCode:
+            selectedProviders = settings.claudeCode.enabled ? [.claudeCode] : []
+        case .both:
+            selectedProviders = enabledProviders
+        }
+
+        let segments = selectedProviders.map {
+            resolveSegment(provider: $0, usage: usages[$0], settings: settings)
+        }
+        guard !segments.isEmpty else {
+            return unavailable(label: "AI", settings: settings)
+        }
+        let visibleSegments = segments.filter { !$0.text.isEmpty }
+        let text = visibleSegments.map(\.text).joined(separator: " / ")
+        return MenuBarPresentation(
+            provider: segments.count == 1 ? segments[0].provider : nil,
+            label: segments.count == 1 ? segments[0].label : "AI",
+            remainingPercent: segments.count == 1 ? segments[0].remainingPercent : nil,
+            text: text,
+            segments: visibleSegments
+        )
     }
 
-    func presentation(in usage: CodexUsage) -> MenuBarPresentation {
-        switch self {
-        case .automatic, .fiveHour:
-            if let value = usage.fiveHourRemainingPercent {
-                return MenuBarPresentation(label: "5H", remainingPercent: value)
-            }
-            if let value = usage.weeklyRemainingPercent {
-                return MenuBarPresentation(label: "Weekly", remainingPercent: value)
-            }
+    private static func resolveSegment(
+        provider: AIProvider,
+        usage: AIUsage?,
+        settings: AppSettings
+    ) -> Segment {
+        guard let usage, !usage.windows.isEmpty else {
+            return unavailableSegment(label: "AI", provider: provider, settings: settings)
+        }
+
+        let window: UsageWindow?
+        let missingLabel: String
+        switch settings.menuBarLimit {
+        case .automatic:
+            window = usage.window(.fiveHour) ?? usage.window(.weekly)
+            missingLabel = "AI"
+        case .fiveHour:
+            window = usage.window(.fiveHour)
+            missingLabel = "5H"
         case .weekly:
-            if let value = usage.weeklyRemainingPercent {
-                return MenuBarPresentation(label: "Weekly", remainingPercent: value)
-            }
-            if let value = usage.fiveHourRemainingPercent {
-                return MenuBarPresentation(label: "5H", remainingPercent: value)
-            }
-        case .lowest:
-            let available = usage.availableLimits
-            if let lowest = available.min(by: { $0.remainingPercent < $1.remainingPercent }) {
-                return MenuBarPresentation(
-                    label: available.count == 1 ? lowest.kind.title : "Low",
-                    remainingPercent: lowest.remainingPercent
-                )
-            }
+            window = usage.window(.weekly)
+            missingLabel = "Weekly"
         }
-        return MenuBarPresentation(label: "Codex", remainingPercent: nil)
+
+        guard let window else {
+            return unavailableSegment(label: missingLabel, provider: provider, settings: settings)
+        }
+        let percentage = formattedPercentage(
+            window.remainingPercent,
+            precision: settings.percentagePrecision
+        )
+        return Segment(
+            provider: provider,
+            label: window.shortName,
+            remainingPercent: window.remainingPercent,
+            text: compose(
+                label: window.shortName,
+                value: percentage,
+                provider: provider,
+                settings: settings
+            )
+        )
+    }
+
+    private static func unavailable(
+        label: String,
+        provider: AIProvider? = nil,
+        settings: AppSettings
+    ) -> MenuBarPresentation {
+        guard settings.unavailableDisplay != .hidden else {
+            return MenuBarPresentation(
+                provider: provider,
+                label: label,
+                remainingPercent: nil,
+                text: "",
+                segments: []
+            )
+        }
+        let value = settings.unavailableDisplay == .dashes ? "--%" : "N/A"
+        let segments = provider.map {
+            [Segment(
+                provider: $0,
+                label: label,
+                remainingPercent: nil,
+                text: compose(label: label, value: value, provider: $0, settings: settings)
+            )]
+        } ?? []
+        return MenuBarPresentation(
+            provider: provider,
+            label: label,
+            remainingPercent: nil,
+            text: compose(label: label, value: value, provider: provider, settings: settings),
+            segments: segments
+        )
+    }
+
+    private static func unavailableSegment(
+        label: String,
+        provider: AIProvider,
+        settings: AppSettings
+    ) -> Segment {
+        guard settings.unavailableDisplay != .hidden else {
+            return Segment(provider: provider, label: label, remainingPercent: nil, text: "")
+        }
+        let value = settings.unavailableDisplay == .dashes ? "--%" : "N/A"
+        return Segment(
+            provider: provider,
+            label: label,
+            remainingPercent: nil,
+            text: compose(label: label, value: value, provider: provider, settings: settings)
+        )
+    }
+
+    private static func compose(
+        label: String,
+        value: String,
+        provider: AIProvider?,
+        settings: AppSettings
+    ) -> String {
+        let core: String
+        switch settings.menuBarFormat {
+        case .pipe: core = "\(label) | \(value)"
+        case .space: core = "\(label) \(value)"
+        case .dot: core = "\(label) · \(value)"
+        case .percentageOnly: core = value
+        }
+        let identification: ProviderIdentification = settings.showProviderName
+            ? (settings.providerIdentification == .icon
+                ? .iconAndName
+                : (settings.providerIdentification == .none ? .name : settings.providerIdentification))
+            : settings.providerIdentification
+        if identification == .name || identification == .iconAndName, let provider {
+            return "\(provider.menuBarName) · \(core)"
+        }
+        return core
+    }
+
+    private static func formattedPercentage(
+        _ value: Double,
+        precision: PercentagePrecision
+    ) -> String {
+        switch precision {
+        case .integer: return "\(Int(value.rounded()))%"
+        case .oneDecimal: return String(format: "%.1f%%", value)
+        }
     }
 }
 
@@ -128,58 +251,6 @@ enum UsageLevel: String, Equatable {
         } else {
             self = .normal
         }
-    }
-
-    var symbolName: String {
-        switch self {
-        case .normal: return "checkmark.circle.fill"
-        case .warning: return "exclamationmark.triangle.fill"
-        case .critical: return "exclamationmark.octagon.fill"
-        }
-    }
-}
-
-enum RefreshInterval: Int, CaseIterable, Identifiable {
-    case oneMinute = 60
-    case fiveMinutes = 300
-    case tenMinutes = 600
-    case thirtyMinutes = 1_800
-
-    var id: Int { rawValue }
-
-    var title: String {
-        switch self {
-        case .oneMinute: return "1 minute"
-        case .fiveMinutes: return "5 minutes"
-        case .tenMinutes: return "10 minutes"
-        case .thirtyMinutes: return "30 minutes"
-        }
-    }
-}
-
-enum NotificationThreshold: Int, CaseIterable, Identifiable {
-    case off = 0
-    case fifty = 50
-    case twenty = 20
-    case ten = 10
-
-    var id: Int { rawValue }
-    var title: String { self == .off ? "Off" : "\(rawValue)%" }
-}
-
-enum SettingsKey {
-    static let menuBarSelection = "menuBarSelection"
-    static let refreshInterval = "refreshInterval"
-    static let notificationThreshold = "notificationThreshold"
-    static let globalShortcutEnabled = "globalShortcutEnabled"
-
-    static func registerDefaults() {
-        UserDefaults.standard.register(defaults: [
-            menuBarSelection: MenuBarSelection.automatic.rawValue,
-            refreshInterval: RefreshInterval.fiveMinutes.rawValue,
-            notificationThreshold: NotificationThreshold.twenty.rawValue,
-            globalShortcutEnabled: true
-        ])
     }
 }
 

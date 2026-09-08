@@ -12,7 +12,8 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "CodexUsageMonitor",
-            path: "Sources/CodexUsageMonitor"
+            path: "Sources/CodexUsageMonitor",
+            resources: [.process("Resources")]
         ),
         .executableTarget(
             name: "CodexUsageLauncher",

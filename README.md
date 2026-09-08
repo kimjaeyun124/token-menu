@@ -1,55 +1,95 @@
-# Codex Usage Monitor
+<p align="center">
+  <img src="assets/token-menu-icon.png" alt="Token Menu app icon" width="144">
+</p>
 
-A lightweight native macOS menu bar utility that shows remaining Codex capacity for the available 5-hour and weekly rate-limit windows.
+# Token Menu
 
-## Behavior
+[English](README.md) · [한국어](README.ko.md)
 
-- The menu bar shows a compact labeled value such as `5H 83%` or `Weekly 84%`.
-- Automatic mode prefers a valid 5-hour window and falls back to weekly when 5-hour data is absent.
-- Clicking the menu bar item opens a compact popover with only the limits returned by Codex.
-- The Dock icon stays hidden through macOS UI-element/accessory behavior.
-- Refresh runs at launch, manually, and every 1, 5, 10, or 30 minutes.
-- Launch at Login uses a bundled `SMAppService` helper.
-- Control–Option–C remains an optional secondary way to open the popover.
+Token Menu is an open-source macOS menu bar utility for monitoring usage limits from supported AI coding services such as Codex and Claude Code.
 
-Missing limits are omitted and never interpreted as zero. If no supported window is available, the menu bar displays `Codex --%` and the popover displays “Usage unavailable.” The app never estimates token counts.
+See your remaining allowance at a glance, open usage details from the menu bar, and keep your Dock clear.
 
-## Data source and privacy
+**[Download the latest DMG](https://github.com/kimjaeyun124/token-menu/releases/latest)**
 
-The app launches the installed Codex CLI's structured app-server protocol and calls `account/rateLimits/read`. Codex labels each window as `usedPercent`; after validating a finite value in `0...100`, the app displays `100 - usedPercent` as remaining.
+## Features
 
-The app does not read, copy, store, print, or upload authentication files. Authentication and the request remain inside the installed Codex process. Raw responses and credentials are never logged.
+- Remaining usage in the menu bar, with the 5-hour window preferred by default.
+- Weekly limits and reset countdowns, including days when applicable.
+- A compact usage panel with Refresh, Settings, and Quit.
+- Per-service visibility, ordering, refresh intervals, and low-allowance notifications.
+- White provider icons by default, with configurable colors.
+- English and Korean interfaces, launch at login, and an optional Control–Option–C shortcut.
+- Settings that open on the current desktop, with a minimum window size and full-row sidebar buttons.
 
-Supported Codex locations include `~/.local/bin/codex`, Homebrew paths, and executables bundled with the ChatGPT or Codex desktop apps.
+Token Menu shows service-provided usage limits, not estimated token counts. Missing data appears as unavailable, never as zero.
 
-## Reference review
+## Service support
 
-The public behavior of [burakereno/codex-monitor](https://github.com/burakereno/codex-monitor) was reviewed. At review time the repository had no `LICENSE` or `COPYING` file and GitHub declared no license. This project is an independent implementation; no reference source code was copied.
+| Service | Current behavior |
+| --- | --- |
+| Codex | Reads live limits through the installed, authenticated Codex app-server. |
+| Claude Code | Can be configured as a provider, but background usage retrieval is currently unavailable in this implementation. |
+
+Claude Code's interactive usage screen is not a standalone background API. Token Menu does not scrape that screen or change your Claude configuration to work around this limitation.
+
+## Install
+
+Requires **macOS 13 or later**. The universal DMG includes Apple Silicon and Intel executables. Runtime checks are performed on Apple Silicon; Intel and macOS 13 have not been runtime-tested.
+
+1. Download the DMG from [Releases](https://github.com/kimjaeyun124/token-menu/releases/latest).
+2. Open it and drag **Token Menu.app** into **Applications**.
+3. Launch Token Menu from Applications once.
+4. Click the usage indicator in the menu bar to open the usage panel.
+5. Optionally enable **Settings → General → Launch at Login**.
+
+The current release is ad-hoc signed and **not Apple-notarized**. macOS may block the first launch. After verifying that you trust the download, use **System Settings → Privacy & Security → Open Anyway**. Token Menu does not require disabling Gatekeeper.
+
+When upgrading from Codex Usage, quit the old app before launching Token Menu. Existing preferences are retained; avoid running both versions together.
+
+Sign in through your installed Codex CLI or desktop app before requesting usage. If a query times out, try Refresh again; a service timeout does not mean your remaining allowance is zero.
+
+## Privacy
+
+Authentication is handled by the installed Codex process. Token Menu does not read or copy credential files, browser cookies, API keys, or authorization headers. It does not log raw service responses or estimate usage when the service is unavailable.
 
 ## Build and test
 
-Requirements: macOS 13 or later, Swift 5.9 or later, and an installed authenticated Codex CLI or desktop app.
+Install Xcode or the Command Line Tools and a Swift toolchain compatible with the package (Swift 5.9 or later).
 
 ```sh
+git clone https://github.com/kimjaeyun124/token-menu.git
+cd token-menu
+
+# Deterministic tests; the live-service check is skipped by default.
 swift test
-CODEX_LIVE_TEST=1 swift test
-./scripts/build-app.sh
-open "dist/Codex Usage.app"
+
+# Optional: query the installed, authenticated Codex service separately.
+CODEX_LIVE_TEST=1 swift test --filter CodexUsageTests.testLiveCodexProviderWhenExplicitlyEnabled
+
+# Universal app and compressed DMG, including the app icon.
+./scripts/build-dmg.sh
+open "dist/Token Menu.app"
 ```
 
-The build script creates an ad-hoc-signed app at `dist/Codex Usage.app`, including its login helper. Install the packaged app in Applications for normal Launch at Login use.
+Outputs: `dist/Token Menu.app`, `dist/token-menu-1.0.0-macOS-universal.dmg`, and its `.sha256` checksum. Set `ARCHITECTURE=arm64` or `ARCHITECTURE=x86_64` for a single-architecture build. Use `SKIP_BUILD=1 ./scripts/build-dmg.sh` to package an already-built app.
 
-## Architecture
+See [distribution notes](docs/distribution.md) for signing, release commands, and verification limits. Internal Swift target names and bundle identifiers remain stable to preserve saved settings.
 
-```text
-Sources/CodexUsageMonitor/
-├── App/          Lifecycle and accessory visibility
-├── MenuBar/      Native NSStatusItem and dynamic popover sizing
-├── Models/       Remaining percentages, visible limits, and display selection
-├── Services/     Codex detection, app-server parsing, refresh, notifications
-├── Shortcuts/    Optional Control–Option–C shortcut
-├── UI/           Compact usage popover and settings
-└── Utilities/    Process execution
-```
+## License
 
-`Sources/CodexUsageLauncher/` contains the bundled login-item helper. See [runtime verification](docs/runtime-verification.md) for the tested states and limitations.
+Token Menu is open-source software licensed under the MIT License.
+
+You are free to use, copy, modify, distribute, and use the source code commercially in accordance with the MIT License.
+
+See [LICENSE](LICENSE) for the full license text. Third-party provider logos, trademarks, and brand assets are **not covered** by Token Menu's MIT License; see [NOTICE.md](NOTICE.md).
+
+## Trademark Notice
+
+Codex, OpenAI, ChatGPT, and their associated names, logos, and marks are trademarks or other intellectual property of OpenAI.
+
+Claude, Anthropic, and their associated names, logos, and marks are trademarks or other intellectual property of Anthropic.
+
+Third-party names, logos, icons, and brand assets included in or referenced by Token Menu are not licensed under the MIT License and remain subject to the rights and policies of their respective owners.
+
+Token Menu is an independent third-party project and is not affiliated with, endorsed by, sponsored by, or officially associated with OpenAI or Anthropic.

@@ -1,8 +1,12 @@
 import Foundation
 import os
 
-protocol CodexUsageProviding: Sendable {
-    func fetchUsage() async throws -> CodexUsage
+protocol AIUsageProvider: Sendable {
+    var id: AIProvider { get }
+    var displayName: String { get }
+
+    func isAvailable() async -> Bool
+    func fetchUsage() async throws -> AIUsage
 }
 
 enum CodexUsageError: LocalizedError {
@@ -59,7 +63,7 @@ struct CodexRateLimitParser {
         return id.intValue
     }
 
-    static func parse(responseData: Data, now: Date = Date()) throws -> CodexUsage {
+    static func parse(responseData: Data, now: Date = Date()) throws -> AIUsage {
         let envelope: Envelope
         do {
             envelope = try JSONDecoder().decode(Envelope.self, from: responseData)
@@ -103,11 +107,25 @@ struct CodexRateLimitParser {
             logger.error("Weekly rate-limit window is unavailable or has an unsupported duration")
         }
 
-        return CodexUsage(
-            fiveHourRemainingPercent: fiveHourRemainingPercent,
-            weeklyRemainingPercent: weeklyRemainingPercent,
-            fiveHourResetDate: validatedDate(from: fiveHourWindow?.resetsAt, field: "5-hour reset"),
-            weeklyResetDate: validatedDate(from: weeklyWindow?.resetsAt, field: "weekly reset"),
+        var normalizedWindows: [UsageWindow] = []
+        if let fiveHourRemainingPercent {
+            normalizedWindows.append(UsageWindow(
+                type: .fiveHour,
+                remainingPercent: fiveHourRemainingPercent,
+                resetDate: validatedDate(from: fiveHourWindow?.resetsAt, field: "5-hour reset")
+            ))
+        }
+        if let weeklyRemainingPercent {
+            normalizedWindows.append(UsageWindow(
+                type: .weekly,
+                remainingPercent: weeklyRemainingPercent,
+                resetDate: validatedDate(from: weeklyWindow?.resetsAt, field: "weekly reset")
+            ))
+        }
+
+        return AIUsage(
+            provider: .codex,
+            windows: normalizedWindows,
             lastUpdated: now,
             source: "Codex app-server account/rateLimits/read"
         )
@@ -132,14 +150,20 @@ struct CodexRateLimitParser {
     }
 }
 
-actor CodexAppServerUsageProvider: CodexUsageProviding {
+actor CodexUsageProvider: AIUsageProvider {
+    nonisolated let id = AIProvider.codex
+    nonisolated var displayName: String { id.displayName }
     private let detector: CodexDetector
 
     init(detector: CodexDetector = CodexDetector()) {
         self.detector = detector
     }
 
-    func fetchUsage() async throws -> CodexUsage {
+    func isAvailable() async -> Bool {
+        (try? detector.detect()) != nil
+    }
+
+    func fetchUsage() async throws -> AIUsage {
         let codex = try detector.detect()
         return try await AppServerRequest(executableURL: codex.executableURL).perform()
     }
@@ -155,13 +179,13 @@ private final class AppServerRequest: @unchecked Sendable {
     private var outputBuffer = Data()
     private var completed = false
     private var sentUsageRequest = false
-    private var continuation: CheckedContinuation<CodexUsage, Error>?
+    private var continuation: CheckedContinuation<AIUsage, Error>?
 
     init(executableURL: URL) {
         self.executableURL = executableURL
     }
 
-    func perform() async throws -> CodexUsage {
+    func perform() async throws -> AIUsage {
         try await withCheckedThrowingContinuation { continuation in
             self.continuation = continuation
             configureProcess()
@@ -258,7 +282,7 @@ private final class AppServerRequest: @unchecked Sendable {
         try inputPipe.fileHandleForWriting.write(contentsOf: data)
     }
 
-    private func finish(_ result: Result<CodexUsage, Error>) {
+    private func finish(_ result: Result<AIUsage, Error>) {
         lock.lock()
         guard !completed else {
             lock.unlock()

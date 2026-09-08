@@ -1,0 +1,25 @@
+Token Menu 설치 / Installation
+
+한국어
+1. 기존 Codex Usage 또는 Token Menu가 실행 중이면 메뉴바의 종료 버튼으로 종료합니다.
+2. Token Menu.app을 Applications 폴더로 드래그합니다.
+3. 응용 프로그램 폴더에서 Token Menu를 한 번 실행합니다.
+4. Dock 대신 화면 위 메뉴바에 표시되는 사용량을 클릭합니다.
+5. 설정 > 일반에서 '로그인할 때 자동 실행'을 켤 수 있습니다.
+
+개발자 인증 및 Apple 공증이 없는 빌드는 macOS에서 경고가 표시될 수 있습니다.
+출처를 확인한 뒤 시스템 설정 > 개인정보 보호 및 보안의 '확인 없이 열기'를 사용하세요.
+기존 Codex Usage와 동시에 실행하지 마세요. 기존 설정은 유지됩니다.
+Codex 사용량을 확인하려면 설치된 Codex CLI/앱에서 먼저 로그인해야 합니다.
+
+English
+1. Quit any running Codex Usage or Token Menu instance from its menu bar.
+2. Drag Token Menu.app into Applications.
+3. Open Token Menu once from the Applications folder.
+4. Click the usage indicator in the menu bar; no Dock icon is shown.
+5. Enable 'Launch at Login' in Settings > General if desired.
+
+Builds without Developer ID signing and Apple notarization may trigger a macOS warning.
+After checking the source, use 'Open Anyway' in System Settings > Privacy & Security.
+Do not run the old Codex Usage app and Token Menu together. Existing preferences are retained.
+Sign in through your installed Codex CLI/app first to retrieve Codex usage.

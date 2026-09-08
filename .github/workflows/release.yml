@@ -1,0 +1,31 @@
+name: Release DMG
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run deterministic tests
+        run: swift test
+
+      - name: Build universal DMG
+        run: ./scripts/build-dmg.sh
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            dist/token-menu-1.0.0-macOS-universal.dmg \
+            dist/token-menu-1.0.0-macOS-universal.dmg.sha256 \
+            --title "Token Menu 1.0.0" \
+            --notes-file docs/releases/v1.0.0.md

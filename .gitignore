@@ -1,5 +1,6 @@
 .build/
 .swiftpm/
 dist/
+outputs/
+support/token-menu.icns
 .DS_Store
-

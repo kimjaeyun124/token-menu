@@ -8,6 +8,7 @@ struct CodexUsageMonitorApp: App {
         Settings {
             SettingsView()
                 .environmentObject(appDelegate.refreshService)
+                .environmentObject(appDelegate.settingsStore)
                 .environmentObject(AppVisibilityController.shared)
         }
     }
