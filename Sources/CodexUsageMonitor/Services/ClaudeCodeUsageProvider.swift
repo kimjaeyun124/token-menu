@@ -21,8 +21,18 @@ enum ClaudeCodeUsageError: LocalizedError, Equatable, Sendable {
 }
 
 struct ClaudeCodeDetector: Sendable {
+    private let overrideExecutableURL: URL?
+
+    init(overrideExecutableURL: URL? = nil) {
+        self.overrideExecutableURL = overrideExecutableURL
+    }
+
     func executableURL() -> URL? {
         let fileManager = FileManager.default
+        if let overrideExecutableURL,
+           fileManager.isExecutableFile(atPath: overrideExecutableURL.path) {
+            return overrideExecutableURL
+        }
         let home = fileManager.homeDirectoryForCurrentUser
         var candidates = [
             home.appendingPathComponent(".local/bin/claude"),

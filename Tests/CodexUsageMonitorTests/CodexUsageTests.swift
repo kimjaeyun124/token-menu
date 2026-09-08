@@ -514,7 +514,8 @@ final class CodexUsageTests: XCTestCase {
         let payloadURL = directory.appendingPathComponent("statusline.json")
         let payload = Data(#"{"rate_limits":{"five_hour":{"used_percentage":12.5,"resets_at":1738425600}}}"#.utf8)
         try payload.write(to: payloadURL)
-        let usage = try await ClaudeCodeUsageProvider(usageFileURL: payloadURL).fetchUsage()
+        let detector = ClaudeCodeDetector(overrideExecutableURL: URL(fileURLWithPath: "/usr/bin/true"))
+        let usage = try await ClaudeCodeUsageProvider(detector: detector, usageFileURL: payloadURL).fetchUsage()
         XCTAssertEqual(usage.fiveHourRemainingPercent!, 87.5, accuracy: 0.001)
         XCTAssertEqual(usage.source, "Claude Code status line rate_limits")
     }
