@@ -11,7 +11,7 @@ Token Menu 설치 / Installation
 출처를 확인한 뒤 시스템 설정 > 개인정보 보호 및 보안의 '확인 없이 열기'를 사용하세요.
 기존 Codex Usage와 동시에 실행하지 마세요. 기존 설정은 유지됩니다.
 Codex 사용량을 확인하려면 설치된 Codex CLI/앱에서 먼저 로그인해야 합니다.
-Claude Code 사용량을 표시하려면 Token Menu.app/Contents/Resources/claude-statusline-token-menu.sh를 Claude Code의 statusLine 명령으로 설정한 뒤 응답을 한 번 완료하세요. Token Menu는 인증 정보를 읽지 않고 공식 rate_limits JSON만 사용합니다.
+Claude Code 사용량을 표시하려면 /Applications/Token Menu.app/Contents/Resources/claude-statusline-token-menu.sh를 Claude Code의 statusLine 명령으로 설정한 뒤 응답을 한 번 완료하세요. Token Menu는 인증 정보를 읽지 않고 공식 rate_limits JSON만 사용합니다.
 
 English
 1. Quit any running Codex Usage or Token Menu instance from its menu bar.
@@ -24,4 +24,4 @@ Builds without Developer ID signing and Apple notarization may trigger a macOS w
 After checking the source, use 'Open Anyway' in System Settings > Privacy & Security.
 Do not run the old Codex Usage app and Token Menu together. Existing preferences are retained.
 Sign in through your installed Codex CLI/app first to retrieve Codex usage.
-To show Claude Code usage, set Claude Code's statusLine command to Token Menu.app/Contents/Resources/claude-statusline-token-menu.sh and complete one response. Token Menu reads only the documented rate_limits JSON and never reads credentials.
+To show Claude Code usage, set Claude Code's statusLine command to /Applications/Token Menu.app/Contents/Resources/claude-statusline-token-menu.sh and complete one response. Token Menu reads only the documented rate_limits JSON and never reads credentials.

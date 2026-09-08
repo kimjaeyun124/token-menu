@@ -39,7 +39,7 @@ Claude Code 2.1.80 이상은 설정된 status line 명령에 구독 한도 정�
 {
   "statusLine": {
     "type": "command",
-    "command": "/absolute/path/to/token-menu/support/claude-statusline-token-menu.sh"
+    "command": "/Applications/Token Menu.app/Contents/Resources/claude-statusline-token-menu.sh"
   }
 }
 ```

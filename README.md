@@ -39,7 +39,7 @@ Claude Code 2.1.80 and later passes subscription rate limits to a configured sta
 {
   "statusLine": {
     "type": "command",
-    "command": "/absolute/path/to/token-menu/support/claude-statusline-token-menu.sh"
+    "command": "/Applications/Token Menu.app/Contents/Resources/claude-statusline-token-menu.sh"
   }
 }
 ```
