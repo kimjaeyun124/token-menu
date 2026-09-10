@@ -42,7 +42,7 @@ struct UsageView: View {
                     .frame(height: settings.progressBarStyle == .normal ? 8 : 5)
             }
 
-            if settings.showResetTime, providerPreferences.showResetTime {
+            if settings.showResetTime, providerPreferences.showResetTime, settings.resetTimeFormat != .hidden {
                 TimelineView(.periodic(from: .now, by: 60)) { context in
                     Text(resetText(at: context.date))
                         .font(.system(size: 11))
@@ -85,43 +85,61 @@ struct UsageView: View {
         let days = totalSeconds / 86_400
         let hours = (totalSeconds % 86_400) / 3_600
         let minutes = (totalSeconds % 3_600) / 60
-        let relative: String
-        if days > 0 {
-            relative = String(
-                format: settingsStore.localized("reset.relative_days_hours_minutes"),
-                locale: settings.language.locale,
-                days,
-                hours,
-                minutes
-            )
-        } else if hours > 0 {
-            relative = String(
-                format: settingsStore.localized("reset.relative_hours_minutes"),
-                locale: settings.language.locale,
-                hours,
-                minutes
-            )
-        } else {
-            relative = String(
-                format: settingsStore.localized("reset.relative_minutes"),
-                locale: settings.language.locale,
-                minutes
-            )
-        }
-        let date = resetDate.formatted(
-            Date.FormatStyle(date: .abbreviated, time: .shortened)
-                .locale(settings.language.locale)
-        )
-        let absolute = String(
-            format: settingsStore.localized("reset.absolute"),
-            locale: settings.language.locale,
-            date
-        )
+        let relative = relativeResetText(days: days, hours: hours, minutes: minutes)
+        let absolute = absoluteResetText(resetDate, now: now)
         switch settings.resetTimeFormat {
         case .relative: return relative
         case .absolute: return absolute
         case .both: return "\(relative)\n\(absolute)"
+        case .hidden: return ""
         }
+    }
+
+    private func relativeResetText(days: Int, hours: Int, minutes: Int) -> String {
+        let key: String
+        let arguments: [CVarArg]
+        if days > 0 {
+            if hours > 0, minutes > 0 { key = "reset.relative_days_hours_minutes"; arguments = [days, hours, minutes] }
+            else if hours > 0 { key = "reset.relative_days_hours"; arguments = [days, hours] }
+            else if minutes > 0 { key = "reset.relative_days_minutes"; arguments = [days, minutes] }
+            else { key = "reset.relative_days"; arguments = [days] }
+        } else if hours > 0 {
+            if minutes > 0 { key = "reset.relative_hours_minutes"; arguments = [hours, minutes] }
+            else { key = "reset.relative_hours"; arguments = [hours] }
+        } else {
+            key = "reset.relative_minutes"
+            arguments = [minutes]
+        }
+        return String(format: settingsStore.localized(key), locale: settings.language.locale, arguments: arguments)
+    }
+
+    private func absoluteResetText(_ resetDate: Date, now: Date) -> String {
+        let locale = settings.language.locale
+        let calendar = Calendar(identifier: .gregorian)
+        let dayOffset = calendar.dateComponents(
+            [.day],
+            from: calendar.startOfDay(for: now),
+            to: calendar.startOfDay(for: resetDate)
+        ).day ?? 0
+        let timeFormatter = DateFormatter()
+        timeFormatter.locale = locale
+        timeFormatter.setLocalizedDateFormatFromTemplate("jmm")
+        let time = timeFormatter.string(from: resetDate)
+        if dayOffset == 0 {
+            return String(format: settingsStore.localized("reset.absolute_today"), locale: locale, time)
+        }
+        if dayOffset == 1 {
+            return String(format: settingsStore.localized("reset.absolute_tomorrow"), locale: locale, time)
+        }
+        let dateFormatter = DateFormatter()
+        dateFormatter.locale = locale
+        dateFormatter.setLocalizedDateFormatFromTemplate("MMMd")
+        return String(
+            format: settingsStore.localized("reset.absolute_date"),
+            locale: locale,
+            dateFormatter.string(from: resetDate),
+            time
+        )
     }
 
     private func color(for level: UsageLevel) -> Color {

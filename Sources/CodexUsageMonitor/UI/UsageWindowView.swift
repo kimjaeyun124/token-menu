@@ -176,7 +176,9 @@ enum PopoverLayoutModel {
         let rowHeight: CGFloat = {
             var value: CGFloat = 32
             if settings.showProgressBars && settings.progressBarStyle != .hidden { value += 10 }
-            if settings.showResetTime { value += settings.resetTimeFormat == .both ? 30 : 17 }
+            if settings.showResetTime, settings.resetTimeFormat != .hidden {
+                value += settings.resetTimeFormat == .both ? 30 : 17
+            }
             if settings.popoverSize == .comfortable { value += 10 }
             return value
         }()

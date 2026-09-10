@@ -14,8 +14,8 @@ See your remaining allowance at a glance, open usage details from the menu bar, 
 
 ## Features
 
-- Remaining usage in the menu bar, with the 5-hour window preferred by default.
-- Weekly limits and reset countdowns, including days when applicable.
+- Remaining usage in the menu bar, with the 5-hour window and one-decimal precision preferred by default.
+- Weekly limits and configurable reset display: remaining countdown, local reset date/time, both, or hidden. Countdown units omit zero values and include days when applicable.
 - A compact usage panel with Refresh, Settings, and Quit.
 - Per-service visibility, ordering, refresh intervals, and low-allowance notifications.
 - White provider icons by default, with configurable colors.

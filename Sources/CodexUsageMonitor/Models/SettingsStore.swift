@@ -141,7 +141,7 @@ struct RefreshDuration: Codable, Equatable, Sendable {
 }
 
 enum ResetTimeFormat: String, Codable, CaseIterable, Identifiable, Sendable {
-    case relative, absolute, both
+    case relative, absolute, both, hidden
     var id: String { rawValue }
     var title: String { rawValue.capitalized }
 }
@@ -191,7 +191,7 @@ struct ProviderPreferences: Codable, Equatable, Sendable {
 }
 
 struct AppSettings: Codable, Equatable, Sendable {
-    var schemaVersion = 3
+    var schemaVersion = 4
 
     var launchAtLogin = false
     var language = AppLanguage.systemDefault
@@ -207,7 +207,7 @@ struct AppSettings: Codable, Equatable, Sendable {
     var showProviderName = false
     var providerIdentification = ProviderIdentification.icon
     var providerIconColor = ProviderIconColor.white
-    var percentagePrecision = PercentagePrecision.integer
+    var percentagePrecision = PercentagePrecision.oneDecimal
     var unavailableDisplay = UnavailableDisplay.dashes
 
     var codex = ProviderPreferences()
@@ -393,6 +393,12 @@ final class SettingsStore: ObservableObject {
         if storedVersion < 3 {
             defaultObject["schemaVersion"] = 3
             defaultObject["providerIconColor"] = ProviderIconColor.white.rawValue
+        }
+        // Version 4 makes the most precise percentage display the default so
+        // the menu bar and usage window show one decimal place after upgrade.
+        if storedVersion < 4 {
+            defaultObject["schemaVersion"] = 4
+            defaultObject["percentagePrecision"] = PercentagePrecision.oneDecimal.rawValue
         }
         guard let mergedData = try? JSONSerialization.data(withJSONObject: defaultObject) else { return nil }
         return try? JSONDecoder().decode(AppSettings.self, from: mergedData)

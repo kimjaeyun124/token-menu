@@ -249,9 +249,10 @@ struct SettingsView: View {
             }
             Section(l("section.reset_time")) {
                 Picker(l("usage.reset_format"), selection: settingsStore.binding(\.resetTimeFormat)) {
-                    Text(l("option.relative")).tag(ResetTimeFormat.relative)
-                    Text(l("option.absolute")).tag(ResetTimeFormat.absolute)
+                    Text(l("option.remaining_time")).tag(ResetTimeFormat.relative)
+                    Text(l("option.reset_time")).tag(ResetTimeFormat.absolute)
                     Text(l("option.both")).tag(ResetTimeFormat.both)
+                    Text(l("option.hidden")).tag(ResetTimeFormat.hidden)
                 }
                 Text(l("usage.always_remaining"))
                     .font(.caption).foregroundStyle(.secondary)

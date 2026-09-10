@@ -77,11 +77,12 @@ final class CodexUsageTests: XCTestCase {
         XCTAssertEqual(settings.language, .systemDefault)
         XCTAssertEqual(settings.providerIdentification, .icon)
         XCTAssertEqual(settings.providerIconColor, .white)
-        XCTAssertEqual(settings.percentagePrecision, .integer)
+        XCTAssertEqual(settings.percentagePrecision, .oneDecimal)
         XCTAssertTrue(settings.automaticRefresh)
         XCTAssertEqual(settings.globalRefreshInterval, .fiveMinutes)
         XCTAssertFalse(settings.notificationsEnabled)
         XCTAssertEqual(settings.popoverSize, .compact)
+        XCTAssertEqual(settings.resetTimeFormat, .relative)
     }
 
     @MainActor
@@ -98,6 +99,22 @@ final class CodexUsageTests: XCTestCase {
         XCTAssertEqual(restored.settings.globalRefreshInterval, RefreshDuration(value: 2, unit: .minutes))
         XCTAssertFalse(restored.settings.claudeCode.showInPopover)
         XCTAssertEqual(restored.settings.language, .korean)
+    }
+
+    @MainActor
+    func testLegacyPrecisionDefaultsToOneDecimalOnUpgrade() throws {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        var legacy = try JSONSerialization.jsonObject(
+            with: JSONEncoder().encode(AppSettings()),
+            options: []
+        ) as! [String: Any]
+        legacy["schemaVersion"] = 3
+        legacy["percentagePrecision"] = PercentagePrecision.integer.rawValue
+        defaults.set(try JSONSerialization.data(withJSONObject: legacy), forKey: SettingsStore.storageKey)
+
+        let restored = SettingsStore(defaults: defaults)
+        XCTAssertEqual(restored.settings.schemaVersion, 4)
+        XCTAssertEqual(restored.settings.percentagePrecision, .oneDecimal)
     }
 
     func testDurationUnitConversions() {
@@ -156,7 +173,7 @@ final class CodexUsageTests: XCTestCase {
         let store = makeStore()
         let usage = makeUsage(provider: .codex, fiveHour: 28, weekly: 84)
         let value = MenuBarPresentation.resolve(usages: [.codex: usage], settings: store.settings)
-        XCTAssertEqual(value.text, "5H | 28%")
+        XCTAssertEqual(value.text, "5H | 28.0%")
     }
 
     func testPercentageFormatterUsesExplicitFractionDigitsAndRounding() {
@@ -200,7 +217,7 @@ final class CodexUsageTests: XCTestCase {
         let store = makeStore()
         let usage = makeUsage(provider: .codex, fiveHour: nil, weekly: 84)
         let value = MenuBarPresentation.resolve(usages: [.codex: usage], settings: store.settings)
-        XCTAssertEqual(value.text, "Weekly | 84%")
+        XCTAssertEqual(value.text, "Weekly | 84.0%")
     }
 
     @MainActor
@@ -235,7 +252,7 @@ final class CodexUsageTests: XCTestCase {
             usages: [.codex: codex, .claudeCode: claude],
             settings: store.settings
         )
-        XCTAssertEqual(value.text, "5H | 71%")
+        XCTAssertEqual(value.text, "5H | 71.0%")
         XCTAssertEqual(UsageRefreshService(providers: [], settingsStore: store).visibleProviders(), [.codex])
     }
 
@@ -246,7 +263,7 @@ final class CodexUsageTests: XCTestCase {
         let usage = makeUsage(provider: .codex, fiveHour: 28, weekly: 84)
         XCTAssertEqual(
             MenuBarPresentation.resolve(usages: [.codex: usage], settings: store.settings).text,
-            "Weekly | 84%"
+            "Weekly | 84.0%"
         )
     }
 
@@ -274,7 +291,7 @@ final class CodexUsageTests: XCTestCase {
             usages: [.codex: codex, .claudeCode: claude],
             settings: store.settings
         )
-        XCTAssertEqual(value.text, "5H | 28% / 5H | 71%")
+        XCTAssertEqual(value.text, "5H | 28.0% / 5H | 71.0%")
         XCTAssertEqual(value.segments.map(\.provider), [.codex, .claudeCode])
     }
 
@@ -441,6 +458,60 @@ final class CodexUsageTests: XCTestCase {
         settings.progressBarStyle = .hidden
         let hidden = PopoverLayoutModel.height(providerCount: 2, rowCount: 4, unavailableCount: 0, settings: settings)
         XCTAssertLessThan(hidden, visible)
+    }
+
+    @MainActor
+    func testResetTimeDisplayModesAndHiddenLayout() {
+        var settings = AppSettings()
+        XCTAssertEqual(ResetTimeFormat.allCases, [.relative, .absolute, .both, .hidden])
+
+        let relativeHeight = PopoverLayoutModel.height(
+            providerCount: 1,
+            rowCount: 2,
+            unavailableCount: 0,
+            settings: settings
+        )
+        settings.resetTimeFormat = .both
+        let bothHeight = PopoverLayoutModel.height(
+            providerCount: 1,
+            rowCount: 2,
+            unavailableCount: 0,
+            settings: settings
+        )
+        settings.resetTimeFormat = .hidden
+        let hiddenHeight = PopoverLayoutModel.height(
+            providerCount: 1,
+            rowCount: 2,
+            unavailableCount: 0,
+            settings: settings
+        )
+
+        XCTAssertGreaterThan(bothHeight, relativeHeight)
+        XCTAssertLessThan(hiddenHeight, relativeHeight)
+    }
+
+    @MainActor
+    func testResetTimeLocalizationOmitsZeroUnits() {
+        let store = makeStore()
+        store.settings.language = .korean
+        XCTAssertEqual(String(format: store.localized("reset.relative_days_hours"), 2, 3), "2일 3시간 후 초기화")
+        XCTAssertEqual(String(format: store.localized("reset.relative_days_minutes"), 2, 4), "2일 4분 후 초기화")
+        XCTAssertEqual(String(format: store.localized("reset.relative_hours"), 3), "3시간 후 초기화")
+
+        store.settings.language = .english
+        XCTAssertEqual(String(format: store.localized("reset.relative_days"), 2), "Resets in 2d")
+        XCTAssertEqual(String(format: store.localized("reset.relative_hours_minutes"), 3, 4), "Resets in 3h 4m")
+    }
+
+    @MainActor
+    func testResetTimeAbsoluteLocalizationUsesTodayTomorrowAndDateLabels() {
+        let store = makeStore()
+        store.settings.language = .korean
+        XCTAssertEqual(String(format: store.localized("reset.absolute_today"), "오후 11:30"), "오늘 오후 11:30 초기화")
+        XCTAssertEqual(String(format: store.localized("reset.absolute_tomorrow"), "오전 4:00"), "내일 오전 4:00 초기화")
+
+        store.settings.language = .english
+        XCTAssertEqual(String(format: store.localized("reset.absolute_date"), "Sep 14", "12:11 PM"), "Resets Sep 14 at 12:11 PM")
     }
 
     @MainActor
