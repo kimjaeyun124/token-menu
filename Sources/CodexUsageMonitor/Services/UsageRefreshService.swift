@@ -359,8 +359,7 @@ final class UsageRefreshService: ObservableObject {
             locale: settingsStore.settings.language.locale,
             type == .fiveHour ? "5H" : settingsStore.localized("limit.weekly"),
             PercentageFormatter.string(
-                for: new,
-                precision: settingsStore.settings.percentagePrecision
+                for: new
             ) ?? PercentageFormatter.unavailable(settingsStore.settings.unavailableDisplay)
         )
         content.sound = .default

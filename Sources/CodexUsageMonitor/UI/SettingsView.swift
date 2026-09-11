@@ -172,10 +172,6 @@ struct SettingsView: View {
                     Text(l("option.name")).tag(ProviderIdentification.name)
                     Text(l("option.icon_name")).tag(ProviderIdentification.iconAndName)
                 }
-                Picker(l("menu_bar.precision"), selection: settingsStore.binding(\.percentagePrecision)) {
-                    Text(l("option.integer")).tag(PercentagePrecision.integer)
-                    Text(l("option.one_decimal")).tag(PercentagePrecision.oneDecimal)
-                }
                 Picker(l("menu_bar.unavailable"), selection: settingsStore.binding(\.unavailableDisplay)) {
                     ForEach(UnavailableDisplay.allCases) { Text(localizedUnavailable($0)).tag($0) }
                 }

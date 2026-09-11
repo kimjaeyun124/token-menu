@@ -91,12 +91,6 @@ enum MenuBarFormat: String, Codable, CaseIterable, Identifiable, Sendable {
     }
 }
 
-enum PercentagePrecision: String, Codable, CaseIterable, Identifiable, Sendable {
-    case integer, oneDecimal
-    var id: String { rawValue }
-    var title: String { self == .integer ? "Integer" : "1 decimal" }
-}
-
 enum UnavailableDisplay: String, Codable, CaseIterable, Identifiable, Sendable {
     case dashes, notAvailable, hidden
     var id: String { rawValue }
@@ -193,7 +187,7 @@ struct ProviderPreferences: Codable, Equatable, Sendable {
 }
 
 struct AppSettings: Codable, Equatable, Sendable {
-    var schemaVersion = 4
+    var schemaVersion = 5
 
     var launchAtLogin = false
     var language = AppLanguage.systemDefault
@@ -209,7 +203,6 @@ struct AppSettings: Codable, Equatable, Sendable {
     var showProviderName = false
     var providerIdentification = ProviderIdentification.icon
     var providerIconColor = ProviderIconColor.white
-    var percentagePrecision = PercentagePrecision.oneDecimal
     var unavailableDisplay = UnavailableDisplay.dashes
 
     var codex = ProviderPreferences()
@@ -396,11 +389,12 @@ final class SettingsStore: ObservableObject {
             defaultObject["schemaVersion"] = 3
             defaultObject["providerIconColor"] = ProviderIconColor.white.rawValue
         }
-        // Version 4 makes the most precise percentage display the default so
-        // the menu bar and usage window show one decimal place after upgrade.
-        if storedVersion < 4 {
-            defaultObject["schemaVersion"] = 4
-            defaultObject["percentagePrecision"] = PercentagePrecision.oneDecimal.rawValue
+        // Version 5 removes the percentage precision preference. Percentages
+        // are always displayed as whole numbers because Codex reports whole
+        // percentage values for the account rate-limit endpoint.
+        if storedVersion < 5 {
+            defaultObject["schemaVersion"] = 5
+            defaultObject.removeValue(forKey: "percentagePrecision")
         }
         guard let mergedData = try? JSONSerialization.data(withJSONObject: defaultObject) else { return nil }
         return try? JSONDecoder().decode(AppSettings.self, from: mergedData)

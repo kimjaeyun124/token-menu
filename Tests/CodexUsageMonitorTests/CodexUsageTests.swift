@@ -38,7 +38,7 @@ final class CodexUsageTests: XCTestCase {
         XCTAssertEqual(usage.monthlyResetDate, Date(timeIntervalSince1970: 1_702_000_000))
     }
 
-    func testCodexParserPreservesFractionalPercentages() throws {
+    func testCodexParserRoundsFractionalPercentagesForDisplay() throws {
         let data = Data(#"""
         {"id":2,"result":{"rateLimits":{"primary":{"usedPercent":"27.6","windowDurationMins":300},
           "secondary":{"usedPercent":27.6,"windowDurationMins":10080}}}}
@@ -50,7 +50,7 @@ final class CodexUsageTests: XCTestCase {
         XCTAssertEqual(usage.weeklyRemainingPercent!, 72.4, accuracy: 0.0001)
         XCTAssertEqual(
             MenuBarPresentation.resolve(usages: [.codex: usage], settings: settings).text,
-            "5H | 72.4%"
+            "5H | 72%"
         )
     }
 
@@ -129,7 +129,7 @@ final class CodexUsageTests: XCTestCase {
         XCTAssertEqual(settings.language, .systemDefault)
         XCTAssertEqual(settings.providerIdentification, .icon)
         XCTAssertEqual(settings.providerIconColor, .white)
-        XCTAssertEqual(settings.percentagePrecision, .oneDecimal)
+        XCTAssertEqual(settings.schemaVersion, 5)
         XCTAssertTrue(settings.automaticRefresh)
         XCTAssertEqual(settings.globalRefreshInterval, .fiveMinutes)
         XCTAssertFalse(settings.notificationsEnabled)
@@ -154,19 +154,18 @@ final class CodexUsageTests: XCTestCase {
     }
 
     @MainActor
-    func testLegacyPrecisionDefaultsToOneDecimalOnUpgrade() throws {
+    func testLegacyPrecisionSettingIsRemovedOnUpgrade() throws {
         let defaults = UserDefaults(suiteName: UUID().uuidString)!
         var legacy = try JSONSerialization.jsonObject(
             with: JSONEncoder().encode(AppSettings()),
             options: []
         ) as! [String: Any]
         legacy["schemaVersion"] = 3
-        legacy["percentagePrecision"] = PercentagePrecision.integer.rawValue
+        legacy["percentagePrecision"] = "integer"
         defaults.set(try JSONSerialization.data(withJSONObject: legacy), forKey: SettingsStore.storageKey)
 
         let restored = SettingsStore(defaults: defaults)
-        XCTAssertEqual(restored.settings.schemaVersion, 4)
-        XCTAssertEqual(restored.settings.percentagePrecision, .oneDecimal)
+        XCTAssertEqual(restored.settings.schemaVersion, 5)
     }
 
     func testAppTranslocationDetectionOnlyMatchesTemporarySecurityPath() {
@@ -234,34 +233,32 @@ final class CodexUsageTests: XCTestCase {
         let store = makeStore()
         let usage = makeUsage(provider: .codex, fiveHour: 28, weekly: 84)
         let value = MenuBarPresentation.resolve(usages: [.codex: usage], settings: store.settings)
-        XCTAssertEqual(value.text, "5H | 28.0%")
+        XCTAssertEqual(value.text, "5H | 28%")
     }
 
-    func testPercentageFormatterUsesExplicitFractionDigitsAndRounding() {
-        XCTAssertEqual(PercentageFormatter.string(for: 0, precision: .integer), "0%")
-        XCTAssertEqual(PercentageFormatter.string(for: 0, precision: .oneDecimal), "0.0%")
-        XCTAssertEqual(PercentageFormatter.string(for: 1, precision: .oneDecimal), "1.0%")
-        XCTAssertEqual(PercentageFormatter.string(for: 68, precision: .oneDecimal), "68.0%")
-        XCTAssertEqual(PercentageFormatter.string(for: 99, precision: .oneDecimal), "99.0%")
-        XCTAssertEqual(PercentageFormatter.string(for: 100, precision: .oneDecimal), "100.0%")
-        XCTAssertEqual(PercentageFormatter.string(for: 51.34, precision: .oneDecimal), "51.3%")
-        XCTAssertEqual(PercentageFormatter.string(for: 51.36, precision: .oneDecimal), "51.4%")
-        XCTAssertEqual(PercentageFormatter.string(for: 99.96, precision: .oneDecimal), "100.0%")
+    func testPercentageFormatterUsesWholeNumberRounding() {
+        XCTAssertEqual(PercentageFormatter.string(for: 0), "0%")
+        XCTAssertEqual(PercentageFormatter.string(for: 1), "1%")
+        XCTAssertEqual(PercentageFormatter.string(for: 68), "68%")
+        XCTAssertEqual(PercentageFormatter.string(for: 99), "99%")
+        XCTAssertEqual(PercentageFormatter.string(for: 100), "100%")
+        XCTAssertEqual(PercentageFormatter.string(for: 51.34), "51%")
+        XCTAssertEqual(PercentageFormatter.string(for: 51.56), "52%")
+        XCTAssertEqual(PercentageFormatter.string(for: 99.96), "100%")
     }
 
     func testPercentageFormatterRejectsInvalidValuesAsUnavailable() {
-        XCTAssertNil(PercentageFormatter.string(for: nil, precision: .oneDecimal))
-        XCTAssertNil(PercentageFormatter.string(for: -.ulpOfOne, precision: .oneDecimal))
-        XCTAssertNil(PercentageFormatter.string(for: 100.001, precision: .oneDecimal))
-        XCTAssertNil(PercentageFormatter.string(for: .nan, precision: .oneDecimal))
-        XCTAssertNil(PercentageFormatter.string(for: .infinity, precision: .oneDecimal))
+        XCTAssertNil(PercentageFormatter.string(for: nil))
+        XCTAssertNil(PercentageFormatter.string(for: -.ulpOfOne))
+        XCTAssertNil(PercentageFormatter.string(for: 100.001))
+        XCTAssertNil(PercentageFormatter.string(for: .nan))
+        XCTAssertNil(PercentageFormatter.string(for: .infinity))
     }
 
     @MainActor
-    func testBothProvidersUseOneDecimalMenuBarFormatting() {
+    func testBothProvidersUseWholeNumberMenuBarFormatting() {
         let store = makeStore()
         store.settings.menuBarProvider = .both
-        store.settings.percentagePrecision = .oneDecimal
         let codex = makeUsage(provider: .codex, fiveHour: 99, weekly: nil)
         let claude = makeUsage(provider: .claudeCode, fiveHour: 71.36, weekly: nil)
         XCTAssertEqual(
@@ -269,7 +266,7 @@ final class CodexUsageTests: XCTestCase {
                 usages: [.codex: codex, .claudeCode: claude],
                 settings: store.settings
             ).text,
-            "5H | 99.0% / 5H | 71.4%"
+            "5H | 99% / 5H | 71%"
         )
     }
 
@@ -278,7 +275,7 @@ final class CodexUsageTests: XCTestCase {
         let store = makeStore()
         let usage = makeUsage(provider: .codex, fiveHour: nil, weekly: 84)
         let value = MenuBarPresentation.resolve(usages: [.codex: usage], settings: store.settings)
-        XCTAssertEqual(value.text, "Weekly | 84.0%")
+        XCTAssertEqual(value.text, "Weekly | 84%")
     }
 
     @MainActor
@@ -313,7 +310,7 @@ final class CodexUsageTests: XCTestCase {
             usages: [.codex: codex, .claudeCode: claude],
             settings: store.settings
         )
-        XCTAssertEqual(value.text, "5H | 71.0%")
+        XCTAssertEqual(value.text, "5H | 71%")
         XCTAssertEqual(UsageRefreshService(providers: [], settingsStore: store).visibleProviders(), [.codex])
     }
 
@@ -324,7 +321,7 @@ final class CodexUsageTests: XCTestCase {
         let usage = makeUsage(provider: .codex, fiveHour: 28, weekly: 84)
         XCTAssertEqual(
             MenuBarPresentation.resolve(usages: [.codex: usage], settings: store.settings).text,
-            "Weekly | 84.0%"
+            "Weekly | 84%"
         )
     }
 
@@ -340,7 +337,7 @@ final class CodexUsageTests: XCTestCase {
         )
         XCTAssertEqual(
             MenuBarPresentation.resolve(usages: [.codex: usage], settings: store.settings).text,
-            "Monthly | 77.0%"
+            "Monthly | 77%"
         )
     }
 
@@ -348,12 +345,11 @@ final class CodexUsageTests: XCTestCase {
     func testMenuBarFormattingPrecisionAndProviderName() {
         let store = makeStore()
         store.settings.menuBarFormat = .dot
-        store.settings.percentagePrecision = .oneDecimal
         store.settings.showProviderName = true
         let usage = makeUsage(provider: .codex, fiveHour: 28.44, weekly: nil)
         XCTAssertEqual(
             MenuBarPresentation.resolve(usages: [.codex: usage], settings: store.settings).text,
-            "Codex · 5H · 28.4%"
+            "Codex · 5H · 28%"
         )
     }
 
@@ -368,7 +364,7 @@ final class CodexUsageTests: XCTestCase {
             usages: [.codex: codex, .claudeCode: claude],
             settings: store.settings
         )
-        XCTAssertEqual(value.text, "5H | 28.0% / 5H | 71.0%")
+        XCTAssertEqual(value.text, "5H | 28% / 5H | 71%")
         XCTAssertEqual(value.segments.map(\.provider), [.codex, .claudeCode])
     }
 

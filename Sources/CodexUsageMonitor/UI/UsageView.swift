@@ -63,8 +63,7 @@ struct UsageView: View {
 
     private var percentageText: String {
         PercentageFormatter.string(
-            for: limit.remainingPercent,
-            precision: settings.percentagePrecision
+            for: limit.remainingPercent
         ) ?? PercentageFormatter.unavailable(settings.unavailableDisplay)
     }
 

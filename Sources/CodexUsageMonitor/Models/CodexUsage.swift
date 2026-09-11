@@ -156,8 +156,7 @@ struct MenuBarPresentation: Equatable, Sendable {
             return unavailableSegment(label: missingLabel, provider: provider, settings: settings)
         }
         let percentage = PercentageFormatter.string(
-            for: window.remainingPercent,
-            precision: settings.percentagePrecision
+            for: window.remainingPercent
         ) ?? PercentageFormatter.unavailable(settings.unavailableDisplay)
         return Segment(
             provider: provider,
@@ -265,7 +264,7 @@ enum UsageLevel: String, Equatable {
 
 extension Double {
     var percentageText: String {
-        PercentageFormatter.string(for: self, precision: .integer) ?? "N/A"
+        PercentageFormatter.string(for: self) ?? "N/A"
     }
 
     static func remaining(fromUsedPercent usedPercent: Double) -> Double? {
