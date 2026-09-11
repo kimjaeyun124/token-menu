@@ -54,6 +54,39 @@ struct CodexRateLimitParser {
         let usedPercent: Double
         let windowDurationMins: Int?
         let resetsAt: Double?
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            usedPercent = try FlexibleDouble(from: container.superDecoder(forKey: .usedPercent)).value
+            windowDurationMins = try container.decodeIfPresent(Int.self, forKey: .windowDurationMins)
+            resetsAt = try container.decodeIfPresent(Double.self, forKey: .resetsAt)
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case usedPercent
+            case windowDurationMins
+            case resetsAt
+        }
+    }
+
+    private struct FlexibleDouble: Decodable {
+        let value: Double
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.singleValueContainer()
+            if let number = try? container.decode(Double.self) {
+                value = number
+                return
+            }
+            let string = try container.decode(String.self)
+            guard let number = Double(string) else {
+                throw DecodingError.dataCorruptedError(
+                    in: container,
+                    debugDescription: "Expected a decimal number or numeric string."
+                )
+            }
+            value = number
+        }
     }
 
     static func responseID(in data: Data) -> Int? {

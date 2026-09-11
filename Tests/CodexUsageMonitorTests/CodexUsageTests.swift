@@ -38,6 +38,22 @@ final class CodexUsageTests: XCTestCase {
         XCTAssertEqual(usage.monthlyResetDate, Date(timeIntervalSince1970: 1_702_000_000))
     }
 
+    func testCodexParserPreservesFractionalPercentages() throws {
+        let data = Data(#"""
+        {"id":2,"result":{"rateLimits":{"primary":{"usedPercent":"27.6","windowDurationMins":300},
+          "secondary":{"usedPercent":27.6,"windowDurationMins":10080}}}}
+        """#.utf8)
+        let usage = try CodexRateLimitParser.parse(responseData: data)
+        let settings = AppSettings()
+
+        XCTAssertEqual(usage.fiveHourRemainingPercent!, 72.4, accuracy: 0.0001)
+        XCTAssertEqual(usage.weeklyRemainingPercent!, 72.4, accuracy: 0.0001)
+        XCTAssertEqual(
+            MenuBarPresentation.resolve(usages: [.codex: usage], settings: settings).text,
+            "5H | 72.4%"
+        )
+    }
+
     func testCodexActivityParserFindsActiveThreadAndTurnStart() throws {
         let list = Data(#"""
         {"id":1,"result":{"data":[
