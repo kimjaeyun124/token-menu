@@ -129,16 +129,100 @@ enum CodexActivityParser {
     }
 }
 
+/// Reads only lifecycle markers from local Codex rollout files. The desktop
+/// client uses a stdio app-server, so its active turn is not always visible on
+/// the control socket used by the CLI daemon. Prompt and tool contents are
+/// intentionally ignored.
+enum CodexSessionActivityScanner {
+    static func scan(
+        sessionsDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".codex/sessions"),
+        now: Date = Date(),
+        freshness: TimeInterval = 15 * 60
+    ) -> [CodexActivity] {
+        let fileManager = FileManager.default
+        guard let enumerator = fileManager.enumerator(
+            at: sessionsDirectory,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else { return [] }
+
+        return enumerator.compactMap { item -> CodexActivity? in
+            guard let url = item as? URL, url.pathExtension == "jsonl" else { return nil }
+            guard let resourceValues = try? url.resourceValues(forKeys: [.contentModificationDateKey]),
+                  let modifiedAt = resourceValues.contentModificationDate,
+                  now.timeIntervalSince(modifiedAt) <= freshness,
+                  let data = try? readLifecycleData(of: url) else { return nil }
+            return parse(data: data, updatedAt: modifiedAt, now: now)
+        }
+        .sorted { ($0.startedAt ?? $0.updatedAt) > ($1.startedAt ?? $1.updatedAt) }
+    }
+
+    static func parse(data: Data, updatedAt: Date, now: Date = Date()) -> CodexActivity? {
+        var activeTurnID: String?
+        var startedAt: Date?
+
+        for line in data.split(separator: 0x0A) {
+            guard
+                let object = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any],
+                let payload = object["payload"] as? [String: Any],
+                let type = payload["type"] as? String
+            else { continue }
+
+            switch type {
+            case "task_started":
+                activeTurnID = payload["turn_id"] as? String
+                if let seconds = payload["started_at"] as? NSNumber {
+                    startedAt = Date(timeIntervalSince1970: seconds.doubleValue)
+                } else {
+                    startedAt = now
+                }
+            case "task_complete":
+                if activeTurnID == (payload["turn_id"] as? String) {
+                    activeTurnID = nil
+                    startedAt = nil
+                }
+            default:
+                continue
+            }
+        }
+
+        guard let activeTurnID else { return nil }
+        return CodexActivity(
+            id: "rollout:\(activeTurnID)",
+            title: nil,
+            state: .working,
+            startedAt: startedAt,
+            updatedAt: updatedAt
+        )
+    }
+
+    private static func readLifecycleData(of url: URL) throws -> Data {
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        // Rollout files can grow beyond a fixed tail window during a long task.
+        // Read the file once, but retain only lifecycle fields while parsing so
+        // prompt and tool contents are never surfaced to the UI or snapshot.
+        return try handle.readToEnd() ?? Data()
+    }
+}
+
 @MainActor
 final class CodexActivityMonitor: ObservableObject {
     @Published private(set) var snapshot = CodexActivitySnapshot.unavailable()
 
     private var task: Task<Void, Never>?
     private let socketPath: String
+    private let sessionsDirectory: URL
 
-    init(socketPath: String = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent(".codex/app-server-control/app-server-control.sock").path) {
+    init(
+        socketPath: String = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".codex/app-server-control/app-server-control.sock").path,
+        sessionsDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".codex/sessions")
+    ) {
         self.socketPath = socketPath
+        self.sessionsDirectory = sessionsDirectory
     }
 
     deinit {
@@ -167,9 +251,10 @@ final class CodexActivityMonitor: ObservableObject {
         while !Task.isCancelled {
             do {
                 let client = try await CodexActivityClient(socketPath: socketPath)
-                let activities = try await client.fetchActiveActivities()
+                let socketActivities = try await client.fetchActiveActivities()
+                let fileActivities = CodexSessionActivityScanner.scan(sessionsDirectory: sessionsDirectory)
                 snapshot = CodexActivitySnapshot(
-                    activities: activities,
+                    activities: merge(socketActivities, with: fileActivities),
                     isConnected: true,
                     lastUpdated: Date()
                 )
@@ -178,10 +263,22 @@ final class CodexActivityMonitor: ObservableObject {
             } catch is CancellationError {
                 return
             } catch {
-                snapshot = CodexActivitySnapshot.unavailable()
+                let fallbackActivities = CodexSessionActivityScanner.scan(sessionsDirectory: sessionsDirectory)
+                snapshot = CodexActivitySnapshot(
+                    activities: fallbackActivities,
+                    isConnected: false,
+                    lastUpdated: Date()
+                )
                 try? await Task.sleep(for: .seconds(30))
             }
         }
+    }
+
+    private func merge(_ socketActivities: [CodexActivity], with fileActivities: [CodexActivity]) -> [CodexActivity] {
+        var result = socketActivities
+        let existingIDs = Set(result.map(\.id))
+        result.append(contentsOf: fileActivities.filter { !existingIDs.contains($0.id) })
+        return result.sorted { ($0.startedAt ?? $0.updatedAt) > ($1.startedAt ?? $1.updatedAt) }
     }
 }
 
@@ -205,7 +302,9 @@ private final class CodexActivityClient: @unchecked Sendable {
     func fetchActiveActivities() async throws -> [CodexActivity] {
         let response = try await request(
             method: "thread/list",
-            params: ["archived": false, "limit": 20, "useStateDbOnly": true]
+            // Include the live in-memory server state. State-DB-only reads can
+            // report every thread as `notLoaded` while a turn is running.
+            params: ["archived": false, "limit": 20, "useStateDbOnly": false]
         )
         var activities = try CodexActivityParser.parseThreadList(responseData: response)
         for index in activities.indices {
