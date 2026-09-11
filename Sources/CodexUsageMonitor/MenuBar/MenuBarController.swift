@@ -8,6 +8,7 @@ final class MenuBarController: NSObject {
     private let statusItem: NSStatusItem
     private let refreshService: UsageRefreshService
     private let settingsStore: SettingsStore
+    private let activityMonitor: CodexActivityMonitor
     private let popover = NSPopover()
     private var cancellables = Set<AnyCancellable>()
     private let logger = Logger(subsystem: "com.kimjaeyun.codexusagemonitor", category: "MenuBar")
@@ -15,17 +16,20 @@ final class MenuBarController: NSObject {
     init(
         refreshService: UsageRefreshService,
         settingsStore: SettingsStore,
-        visibility: AppVisibilityController
+        visibility: AppVisibilityController,
+        activityMonitor: CodexActivityMonitor
     ) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         self.refreshService = refreshService
         self.settingsStore = settingsStore
+        self.activityMonitor = activityMonitor
         super.init()
 
         let rootView = UsageWindowView()
             .environmentObject(refreshService)
             .environmentObject(settingsStore)
             .environmentObject(visibility)
+            .environmentObject(activityMonitor)
         popover.contentSize = NSSize(width: 320, height: 260)
         popover.behavior = .transient
         popover.animates = false
@@ -35,12 +39,15 @@ final class MenuBarController: NSObject {
             button.target = self
             button.action = #selector(togglePopover)
             button.font = .monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .medium)
-            button.toolTip = settingsStore.localized("app.title")
+            button.toolTip = tooltipText
         }
 
         refreshService.$usageByProvider
             .combineLatest(settingsStore.$revision)
             .sink { [weak self] _, _ in self?.updatePresentation() }
+            .store(in: &cancellables)
+        activityMonitor.$snapshot
+            .sink { [weak self] _ in self?.updatePresentation() }
             .store(in: &cancellables)
     }
 
@@ -100,7 +107,7 @@ final class MenuBarController: NSObject {
             statusItem.button?.imagePosition = .noImage
             statusItem.button?.attributedTitle = attributedTitle(for: presentation, settings: settings)
         }
-        statusItem.button?.toolTip = settingsStore.localized("app.title")
+        statusItem.button?.toolTip = tooltipText
         let hasUsage = presentation.segments.contains { $0.remainingPercent != nil }
         statusItem.button?.setAccessibilityLabel(
             hasUsage
@@ -120,6 +127,13 @@ final class MenuBarController: NSObject {
         logger.notice(
             "Menu bar label updated: \(presentation.text.isEmpty ? "hidden" : presentation.text, privacy: .public); provider icons: \(iconCount); icon color: \(settings.providerIconColor.rawValue, privacy: .public)"
         )
+    }
+
+    private var tooltipText: String {
+        guard let activity = activityMonitor.snapshot.primary else {
+            return settingsStore.localized("app.title")
+        }
+        return "\(settingsStore.localized(activity.state.localizationKey)) · \(settingsStore.localized("activity.elapsed"))"
     }
 
     private func attributedTitle(

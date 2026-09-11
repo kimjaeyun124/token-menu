@@ -222,6 +222,9 @@ struct SettingsView: View {
                     Toggle(l("services.show_weekly"), isOn: providerBinding(provider, \.showWeekly))
                 }
                 GridRow {
+                    Toggle(l("services.show_monthly"), isOn: providerBinding(provider, \.showMonthly))
+                }
+                GridRow {
                     Toggle(l("services.show_reset"), isOn: providerBinding(provider, \.showResetTime))
                     Toggle(l("services.show_progress"), isOn: providerBinding(provider, \.showProgressBar))
                 }
@@ -444,6 +447,7 @@ struct SettingsView: View {
         case .automatic: return l("option.automatic")
         case .fiveHour: return "5H"
         case .weekly: return l("limit.weekly")
+        case .monthly: return l("limit.monthly")
         }
     }
 

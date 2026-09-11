@@ -66,13 +66,14 @@ enum ProviderIconColor: String, Codable, CaseIterable, Identifiable, Sendable {
 }
 
 enum MenuBarLimitChoice: String, Codable, CaseIterable, Identifiable, Sendable {
-    case automatic, fiveHour, weekly
+    case automatic, fiveHour, weekly, monthly
     var id: String { rawValue }
     var title: String {
         switch self {
         case .automatic: return "Automatic"
         case .fiveHour: return "5H"
         case .weekly: return "Weekly"
+        case .monthly: return "Monthly"
         }
     }
 }
@@ -183,6 +184,7 @@ struct ProviderPreferences: Codable, Equatable, Sendable {
     var includeInAutomaticRefresh = true
     var showFiveHour = true
     var showWeekly = true
+    var showMonthly = true
     var showResetTime = true
     var showProgressBar = true
     var useGlobalRefreshInterval = true

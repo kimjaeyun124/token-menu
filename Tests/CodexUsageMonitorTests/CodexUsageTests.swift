@@ -25,6 +25,42 @@ final class CodexUsageTests: XCTestCase {
         XCTAssertEqual(usage.weeklyResetDate, Date(timeIntervalSince1970: 1_701_000_000))
     }
 
+    func testCodexParserAcceptsOptionalMonthlyWindow() throws {
+        let data = Data(#"""
+        {"id":2,"result":{"rateLimits":{"primary":{"usedPercent":17,"windowDurationMins":300},
+          "secondary":{"usedPercent":39,"windowDurationMins":10080},
+          "tertiary":{"usedPercent":23,"windowDurationMins":43200,"resetsAt":1702000000}}}}
+        """#.utf8)
+        let usage = try CodexRateLimitParser.parse(responseData: data)
+
+        XCTAssertEqual(usage.windows.map(\.type), [.fiveHour, .weekly, .monthly])
+        XCTAssertEqual(usage.monthlyRemainingPercent, 77)
+        XCTAssertEqual(usage.monthlyResetDate, Date(timeIntervalSince1970: 1_702_000_000))
+    }
+
+    func testCodexActivityParserFindsActiveThreadAndTurnStart() throws {
+        let list = Data(#"""
+        {"id":1,"result":{"data":[
+          {"id":"thread-1","name":"Build Token Menu","preview":"Build","updatedAt":1700000100,
+           "status":{"type":"active","activeFlags":[]},"turns":[]},
+          {"id":"thread-2","name":"Finished","preview":"Done","updatedAt":1700000200,
+           "status":{"type":"idle"},"turns":[]}]}}
+        """#.utf8)
+        let activities = try CodexActivityParser.parseThreadList(responseData: list)
+        XCTAssertEqual(activities.map(\.id), ["thread-1"])
+        XCTAssertEqual(activities.first?.state, .working)
+
+        let read = Data(#"""
+        {"id":2,"result":{"thread":{"id":"thread-1","name":"Build Token Menu",
+          "preview":"Build","updatedAt":1700000300,"status":{"type":"active","activeFlags":["waitingOnApproval"]},
+          "turns":[{"id":"turn-1","status":"inProgress","startedAt":1700000000,"items":[]}]}}}
+        """#.utf8)
+        let merged = try CodexActivityParser.mergeTurn(responseData: read, into: activities[0])
+        XCTAssertEqual(merged.state, .waitingForApproval)
+        XCTAssertEqual(merged.startedAt, Date(timeIntervalSince1970: 1_700_000_000))
+        XCTAssertEqual(merged.updatedAt, Date(timeIntervalSince1970: 1_700_000_300))
+    }
+
     func testCodexParserSelectsCodexBucket() throws {
         let data = Data(#"""
         {"id":2,"result":{"rateLimits":{"primary":{"usedPercent":99,"windowDurationMins":300}},
@@ -115,6 +151,15 @@ final class CodexUsageTests: XCTestCase {
         let restored = SettingsStore(defaults: defaults)
         XCTAssertEqual(restored.settings.schemaVersion, 4)
         XCTAssertEqual(restored.settings.percentagePrecision, .oneDecimal)
+    }
+
+    func testAppTranslocationDetectionOnlyMatchesTemporarySecurityPath() {
+        XCTAssertTrue(AppLocationDiagnostics.isAppTranslocated(
+            bundleURL: URL(fileURLWithPath: "/private/var/folders/x/AppTranslocation/ABC/d/Token Menu.app")
+        ))
+        XCTAssertFalse(AppLocationDiagnostics.isAppTranslocated(
+            bundleURL: URL(fileURLWithPath: "/Applications/Token Menu.app")
+        ))
     }
 
     func testDurationUnitConversions() {
@@ -264,6 +309,22 @@ final class CodexUsageTests: XCTestCase {
         XCTAssertEqual(
             MenuBarPresentation.resolve(usages: [.codex: usage], settings: store.settings).text,
             "Weekly | 84.0%"
+        )
+    }
+
+    @MainActor
+    func testMenuBarLimitSelectionUsesMonthlyWhenRequested() {
+        let store = makeStore()
+        store.settings.menuBarLimit = .monthly
+        let usage = AIUsage(
+            provider: .codex,
+            windows: [UsageWindow(type: .monthly, remainingPercent: 77, resetDate: nil)],
+            lastUpdated: Date(timeIntervalSince1970: 100),
+            source: "Test"
+        )
+        XCTAssertEqual(
+            MenuBarPresentation.resolve(usages: [.codex: usage], settings: store.settings).text,
+            "Monthly | 77.0%"
         )
     }
 

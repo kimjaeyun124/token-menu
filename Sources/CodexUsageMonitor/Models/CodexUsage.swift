@@ -19,10 +19,23 @@ enum AIProvider: String, CaseIterable, Identifiable, Codable, Sendable {
 enum UsageWindowType: String, Identifiable, Sendable {
     case fiveHour
     case weekly
+    case monthly
 
     var id: String { rawValue }
-    var displayName: String { self == .fiveHour ? "5-Hour" : "Weekly" }
-    var shortName: String { self == .fiveHour ? "5H" : "Weekly" }
+    var displayName: String {
+        switch self {
+        case .fiveHour: return "5-Hour"
+        case .weekly: return "Weekly"
+        case .monthly: return "Monthly"
+        }
+    }
+    var shortName: String {
+        switch self {
+        case .fiveHour: return "5H"
+        case .weekly: return "Weekly"
+        case .monthly: return "Monthly"
+        }
+    }
 }
 
 struct UsageWindow: Identifiable, Equatable, Sendable {
@@ -47,8 +60,10 @@ struct AIUsage: Equatable, Sendable {
 
     var fiveHourRemainingPercent: Double? { window(.fiveHour)?.remainingPercent }
     var weeklyRemainingPercent: Double? { window(.weekly)?.remainingPercent }
+    var monthlyRemainingPercent: Double? { window(.monthly)?.remainingPercent }
     var fiveHourResetDate: Date? { window(.fiveHour)?.resetDate }
     var weeklyResetDate: Date? { window(.weekly)?.resetDate }
+    var monthlyResetDate: Date? { window(.monthly)?.resetDate }
     var lowestRemainingPercent: Double? { windows.map(\.remainingPercent).min() }
 
     static func unavailable(
@@ -124,7 +139,7 @@ struct MenuBarPresentation: Equatable, Sendable {
         let missingLabel: String
         switch settings.menuBarLimit {
         case .automatic:
-            window = usage.window(.fiveHour) ?? usage.window(.weekly)
+            window = usage.window(.fiveHour) ?? usage.window(.weekly) ?? usage.window(.monthly)
             missingLabel = "AI"
         case .fiveHour:
             window = usage.window(.fiveHour)
@@ -132,6 +147,9 @@ struct MenuBarPresentation: Equatable, Sendable {
         case .weekly:
             window = usage.window(.weekly)
             missingLabel = "Weekly"
+        case .monthly:
+            window = usage.window(.monthly)
+            missingLabel = "Monthly"
         }
 
         guard let window else {

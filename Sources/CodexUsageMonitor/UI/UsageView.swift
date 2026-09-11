@@ -9,7 +9,7 @@ struct UsageView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: settings.popoverSize == .compact ? 5 : 8) {
             HStack(alignment: .firstTextBaseline) {
-                Text(limit.type == .fiveHour ? "5H" : settingsStore.localized("limit.weekly"))
+                Text(localizedLimit)
                     .font(.system(size: 13, weight: .semibold))
                 Spacer()
                 if settings.showRemainingPercentage {
@@ -28,7 +28,7 @@ struct UsageView: View {
                 String(
                     format: settingsStore.localized("accessibility.usage_row"),
                     locale: settings.language.locale,
-                    limit.type == .fiveHour ? "5H" : settingsStore.localized("limit.weekly"),
+                    localizedLimit,
                     percentageText,
                     levelText
                 )
@@ -50,6 +50,14 @@ struct UsageView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
+        }
+    }
+
+    private var localizedLimit: String {
+        switch limit.type {
+        case .fiveHour: return "5H"
+        case .weekly: return settingsStore.localized("limit.weekly")
+        case .monthly: return settingsStore.localized("limit.monthly")
         }
     }
 

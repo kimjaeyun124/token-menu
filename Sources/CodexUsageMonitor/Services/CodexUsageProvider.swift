@@ -47,6 +47,7 @@ struct CodexRateLimitParser {
         let limitId: String?
         let primary: Window?
         let secondary: Window?
+        let tertiary: Window?
     }
 
     private struct Window: Decodable {
@@ -87,9 +88,16 @@ struct CodexRateLimitParser {
         let snapshot = result.rateLimitsByLimitId?["codex"]
             ?? result.rateLimitsByLimitId?.values.first(where: { $0.limitId == "codex" })
             ?? result.rateLimits
-        let windows = [snapshot.primary, snapshot.secondary].compactMap { $0 }
+        let windows = [snapshot.primary, snapshot.secondary, snapshot.tertiary].compactMap { $0 }
         let fiveHourWindow = windows.first { $0.windowDurationMins == 300 }
         let weeklyWindow = windows.first { $0.windowDurationMins == 10_080 }
+        // Some Codex plans expose a longer monthly allowance in addition to
+        // the standard 5-hour and weekly windows. Keep this optional: never
+        // synthesize a monthly value when the service does not provide one.
+        let monthlyWindow = windows.first {
+            guard let duration = $0.windowDurationMins else { return false }
+            return (28 * 1_440...31 * 1_440).contains(duration)
+        }
 
         let fiveHourRemainingPercent = validatedRemaining(
             from: fiveHourWindow?.usedPercent,
@@ -98,6 +106,10 @@ struct CodexRateLimitParser {
         let weeklyRemainingPercent = validatedRemaining(
             from: weeklyWindow?.usedPercent,
             field: "weekly used percent"
+        )
+        let monthlyRemainingPercent = validatedRemaining(
+            from: monthlyWindow?.usedPercent,
+            field: "monthly used percent"
         )
 
         if fiveHourWindow == nil {
@@ -120,6 +132,13 @@ struct CodexRateLimitParser {
                 type: .weekly,
                 remainingPercent: weeklyRemainingPercent,
                 resetDate: validatedDate(from: weeklyWindow?.resetsAt, field: "weekly reset")
+            ))
+        }
+        if let monthlyRemainingPercent {
+            normalizedWindows.append(UsageWindow(
+                type: .monthly,
+                remainingPercent: monthlyRemainingPercent,
+                resetDate: validatedDate(from: monthlyWindow?.resetsAt, field: "monthly reset")
             ))
         }
 
@@ -217,6 +236,20 @@ private final class AppServerRequest: @unchecked Sendable {
     private func configureProcess() {
         process.executableURL = executableURL
         process.arguments = ["app-server", "--stdio"]
+        // A quarantined app can be launched from an AppTranslocation mount.
+        // Keep Codex independent from that temporary bundle path by using a
+        // stable working directory and the same user-local PATH candidates as
+        // CodexDetector.
+        process.currentDirectoryURL = FileManager.default.homeDirectoryForCurrentUser
+        var environment = ProcessInfo.processInfo.environment
+        let stablePath = [
+            FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local/bin").path,
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+            environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
+        ].joined(separator: ":")
+        environment["PATH"] = stablePath
+        process.environment = environment
         process.standardInput = inputPipe
         process.standardOutput = outputPipe
         process.standardError = errorPipe

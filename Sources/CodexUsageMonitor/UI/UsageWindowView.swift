@@ -5,6 +5,7 @@ struct UsageWindowView: View {
     @EnvironmentObject private var refreshService: UsageRefreshService
     @EnvironmentObject private var settingsStore: SettingsStore
     @EnvironmentObject private var visibility: AppVisibilityController
+    @EnvironmentObject private var activityMonitor: CodexActivityMonitor
 
     var body: some View {
         let providers = refreshService.visibleProviders()
@@ -13,6 +14,11 @@ struct UsageWindowView: View {
         VStack(alignment: .leading, spacing: settings.popoverSize == .compact ? 9 : 13) {
             Text(settingsStore.localized("app.title"))
                 .font(.system(size: 16, weight: .semibold))
+
+            if let activity = activityMonitor.snapshot.primary {
+                CodexActivityView(activity: activity)
+                Divider()
+            }
 
             if providers.isEmpty {
                 Text(settingsStore.localized("status.no_providers"))
@@ -148,6 +154,9 @@ struct UsageWindowView: View {
     }
 
     private func localizedError(_ error: String, provider: AIProvider) -> String {
+        if provider == .codex, AppLocationDiagnostics.isAppTranslocated {
+            return settingsStore.localized("error.codex_translocated")
+        }
         if provider == .claudeCode { return settingsStore.localized("error.claude_background") }
         if error.contains("Sign in") { return settingsStore.localized("error.codex_sign_in") }
         return settingsStore.localized("status.usage_unavailable")
@@ -163,6 +172,80 @@ struct UsageWindowView: View {
             guard alert.runModal() == .alertFirstButtonReturn else { return }
         }
         NSApplication.shared.terminate(nil)
+    }
+}
+
+private struct CodexActivityView: View {
+    @EnvironmentObject private var settingsStore: SettingsStore
+    let activity: CodexActivity
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: iconName)
+                    .foregroundStyle(iconColor)
+                    .frame(width: 15)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack {
+                        Text(settingsStore.localized("activity.title"))
+                            .font(.system(size: 12, weight: .semibold))
+                        Spacer()
+                        Text(settingsStore.localized(activity.state.localizationKey))
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    }
+                    if let title = activity.title {
+                        Text(title)
+                            .font(.system(size: 11))
+                            .lineLimit(1)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(elapsedText(at: context.date))
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(accessibilityText(at: context.date))
+        }
+    }
+
+    private var iconName: String {
+        switch activity.state {
+        case .working: return "arrow.triangle.2.circlepath"
+        case .waitingForApproval: return "checkmark.shield"
+        case .waitingForInput: return "text.bubble"
+        case .error: return "exclamationmark.triangle"
+        }
+    }
+
+    private var iconColor: Color {
+        switch activity.state {
+        case .working: return .accentColor
+        case .waitingForApproval, .waitingForInput: return .orange
+        case .error: return .red
+        }
+    }
+
+    private func elapsedText(at now: Date) -> String {
+        guard let startedAt = activity.startedAt else {
+            return settingsStore.localized("activity.elapsed_unavailable")
+        }
+        let seconds = max(0, Int(now.timeIntervalSince(startedAt)))
+        let hours = seconds / 3_600
+        let minutes = (seconds % 3_600) / 60
+        let remainder = seconds % 60
+        return String(
+            format: settingsStore.localized("activity.elapsed_format"),
+            locale: settingsStore.settings.language.locale,
+            hours,
+            minutes,
+            remainder
+        )
+    }
+
+    private func accessibilityText(at now: Date) -> String {
+        "\(settingsStore.localized("activity.title")), \(settingsStore.localized(activity.state.localizationKey)), \(elapsedText(at: now))"
     }
 }
 

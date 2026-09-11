@@ -15,14 +15,19 @@ See your remaining allowance at a glance, open usage details from the menu bar, 
 ## Features
 
 - Remaining usage in the menu bar, with the 5-hour window and one-decimal precision preferred by default.
-- Weekly limits and configurable reset display: remaining countdown, local reset date/time, both, or hidden. Countdown units omit zero values and include days when applicable.
+- Weekly and optional monthly limits, plus configurable reset display: remaining countdown, local reset date/time, both, or hidden. Countdown units omit zero values and include days when applicable.
 - A compact usage panel with Refresh, Settings, and Quit.
 - Per-service visibility, ordering, refresh intervals, and low-allowance notifications.
 - White provider icons by default, with configurable colors.
 - English and Korean interfaces, launch at login, and an optional Control–Option–C shortcut.
 - Settings that open on the current desktop, with a minimum window size and full-row sidebar buttons.
+- Optional current Codex task status from the local app-server: working or waiting state with elapsed time.
 
 Token Menu shows service-provided usage limits, not estimated token counts. Missing data appears as unavailable, never as zero.
+
+If Codex exposes a monthly allowance for the signed-in plan, Token Menu displays that service-provided window too. It never fabricates a monthly value when the current Codex response does not include one.
+
+When the Codex app-server daemon is available, the usage popover also shows the currently active task, its waiting state, and elapsed time. This connection is read-only and does not send prompts or modify Codex tasks.
 
 ## Service support
 
@@ -55,6 +60,8 @@ Requires **macOS 13 or later**. The universal DMG includes Apple Silicon and Int
 3. Launch Token Menu from Applications once.
 4. Click the usage indicator in the menu bar to open the usage panel.
 5. Optionally enable **Settings → General → Launch at Login**.
+
+Always launch the copied app from **Applications**, not directly from the downloaded DMG or Downloads folder. macOS may otherwise use AppTranslocation for a quarantined download, which prevents the Codex app-server from being reached. This ad-hoc build cannot remove quarantine itself; if macOS still reports a temporary security location, use **Open Anyway** in **System Settings → Privacy & Security**, then launch the copy in Applications again.
 
 The current release is ad-hoc signed and **not Apple-notarized**. macOS may block the first launch. After verifying that you trust the download, use **System Settings → Privacy & Security → Open Anyway**. Token Menu does not require disabling Gatekeeper.
 

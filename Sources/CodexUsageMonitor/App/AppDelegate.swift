@@ -6,6 +6,7 @@ import OSLog
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let settingsStore = SettingsStore.shared
     let refreshService: UsageRefreshService
+    let activityMonitor = CodexActivityMonitor()
     private var menuBarController: MenuBarController?
     private var wakeObserver: NSObjectProtocol?
     private let connectivityMonitor = ConnectivityMonitor()
@@ -44,12 +45,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menuBarController = MenuBarController(
             refreshService: refreshService,
             settingsStore: settingsStore,
-            visibility: visibility
+            visibility: visibility,
+            activityMonitor: activityMonitor
         )
         self.menuBarController = menuBarController
         visibility.configure(menuBarController: menuBarController, refreshService: refreshService)
         visibility.applyStoredSettings()
         refreshService.start()
+        activityMonitor.start()
         let isLoginLaunch = ProcessInfo.processInfo.arguments.contains("--background-login")
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification,

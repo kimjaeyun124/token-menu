@@ -135,6 +135,7 @@ final class UsageRefreshService: ObservableObject {
         return (usageByProvider[provider]?.windows ?? []).filter {
             ($0.type == .fiveHour && preferences.showFiveHour)
                 || ($0.type == .weekly && preferences.showWeekly)
+                || ($0.type == .monthly && preferences.showMonthly)
         }
     }
 
