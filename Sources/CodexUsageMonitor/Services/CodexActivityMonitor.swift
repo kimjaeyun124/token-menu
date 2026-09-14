@@ -224,10 +224,62 @@ enum CodexSessionActivityScanner {
     }
 
     private static func workspaceName(from path: String) -> String? {
-        let name = URL(fileURLWithPath: path).lastPathComponent
+        let directory = projectDirectory(near: URL(fileURLWithPath: path))
+        if let bundleName = bundleDisplayName(in: directory) {
+            return bundleName
+        }
+        let name = directory.lastPathComponent
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty, name != "/" else { return nil }
         return String(name.prefix(80))
+    }
+
+    private static func projectDirectory(near directory: URL) -> URL {
+        let fileManager = FileManager.default
+        if fileManager.fileExists(atPath: directory.appendingPathComponent(".git").path) {
+            return directory
+        }
+
+        // Codex Desktop may start in a workspace container that holds the
+        // actual checkout one or two levels below it. Resolve a unique nested
+        // checkout so the UI can use the product name from its bundle metadata.
+        let candidates = nestedGitDirectories(in: directory, depth: 2)
+        return candidates.count == 1 ? candidates[0] : directory
+    }
+
+    private static func nestedGitDirectories(in directory: URL, depth: Int) -> [URL] {
+        guard depth > 0,
+              let children = try? FileManager.default.contentsOfDirectory(
+                  at: directory,
+                  includingPropertiesForKeys: [.isDirectoryKey],
+                  options: [.skipsHiddenFiles]
+              ) else { return [] }
+
+        var matches: [URL] = []
+        for child in children {
+            guard (try? child.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else {
+                continue
+            }
+            if FileManager.default.fileExists(atPath: child.appendingPathComponent(".git").path) {
+                matches.append(child)
+            } else if depth > 1 {
+                matches.append(contentsOf: nestedGitDirectories(in: child, depth: depth - 1))
+            }
+        }
+        return matches
+    }
+
+    private static func bundleDisplayName(in projectDirectory: URL) -> String? {
+        let infoURL = projectDirectory.appendingPathComponent("support/Info.plist")
+        guard let data = try? Data(contentsOf: infoURL),
+              let plist = try? PropertyListSerialization.propertyList(from: data, format: nil),
+              let values = plist as? [String: Any] else { return nil }
+        let value = (values["CFBundleDisplayName"] as? String)
+            ?? (values["CFBundleName"] as? String)
+        guard let value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+        return String(value.trimmingCharacters(in: .whitespacesAndNewlines).prefix(80))
     }
 
     private static func readLifecycleData(of url: URL) throws -> Data {
