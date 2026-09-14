@@ -21,6 +21,10 @@ enum CodexActivityState: Equatable, Sendable {
 struct CodexActivity: Equatable, Sendable, Identifiable {
     let id: String
     let title: String?
+    /// ChatGPT's Codex thread/session identifier used by the `codex://` deep link.
+    /// This is separate from `id` because rollout activities use a turn-based
+    /// identity to deduplicate files while their ChatGPT target is session-based.
+    let chatGPTThreadID: String?
     let state: CodexActivityState
     let startedAt: Date?
     let updatedAt: Date
@@ -82,6 +86,7 @@ enum CodexActivityParser {
             return CodexActivity(
                 id: thread.id,
                 title: normalizedTitle(thread.name, preview: thread.preview),
+                chatGPTThreadID: thread.id,
                 state: state,
                 startedAt: latestStartedAt(thread.turns),
                 updatedAt: Date(timeIntervalSince1970: TimeInterval(thread.updatedAt))
@@ -96,6 +101,7 @@ enum CodexActivityParser {
         return CodexActivity(
             id: activity.id,
             title: normalizedTitle(thread.name, preview: thread.preview) ?? activity.title,
+            chatGPTThreadID: thread.id,
             state: activityState(for: thread.status) ?? activity.state,
             startedAt: latestStartedAt(thread.turns) ?? activity.startedAt,
             updatedAt: Date(timeIntervalSince1970: TimeInterval(thread.updatedAt))
@@ -171,6 +177,7 @@ enum CodexSessionActivityScanner {
     static func parse(data: Data, updatedAt: Date, now: Date = Date()) -> CodexActivity? {
         var activeTurnID: String?
         var startedAt: Date?
+        var chatGPTThreadID: String?
 
         let startedMarker = Data(#""type":"task_started""#.utf8)
         let completedMarker = Data(#""type":"task_complete""#.utf8)
@@ -193,6 +200,8 @@ enum CodexSessionActivityScanner {
 
             switch type {
             case "session_meta":
+                chatGPTThreadID = (payload["session_id"] as? String)
+                    ?? (payload["id"] as? String)
                 if let cwd = payload["cwd"] as? String {
                     sessionTitle = workspaceName(from: cwd)
                 }
@@ -217,6 +226,7 @@ enum CodexSessionActivityScanner {
         return CodexActivity(
             id: "rollout:\(activeTurnID)",
             title: sessionTitle,
+            chatGPTThreadID: chatGPTThreadID,
             state: .working,
             startedAt: startedAt,
             updatedAt: updatedAt

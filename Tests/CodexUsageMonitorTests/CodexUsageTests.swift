@@ -64,6 +64,7 @@ final class CodexUsageTests: XCTestCase {
         """#.utf8)
         let activities = try CodexActivityParser.parseThreadList(responseData: list)
         XCTAssertEqual(activities.map(\.id), ["thread-1"])
+        XCTAssertEqual(activities.first?.chatGPTThreadID, "thread-1")
         XCTAssertEqual(activities.first?.state, .working)
 
         let read = Data(#"""
@@ -80,7 +81,7 @@ final class CodexUsageTests: XCTestCase {
     func testCodexSessionScannerFindsUnfinishedDesktopTurnWithoutReadingPrompt() throws {
         let now = Date(timeIntervalSince1970: 1_700_000_100)
         let data = Data(#"""
-        {"type":"session_meta","payload":{"cwd":"/Users/example/alpha-project"}}
+        {"type":"session_meta","payload":{"id":"session-1","session_id":"session-1","cwd":"/Users/example/alpha-project"}}
         {"type":"event_msg","payload":{"type":"task_started","turn_id":"turn-1","started_at":1700000000}}
         {"type":"response_item","payload":{"type":"message","content":[{"text":"private prompt"}]}}
         {"type":"event_msg","payload":{"type":"item_completed","item":{"type":"Reasoning"}}}
@@ -92,11 +93,28 @@ final class CodexUsageTests: XCTestCase {
         let activity = CodexSessionActivityScanner.parse(data: activityData, updatedAt: now, now: now)
         XCTAssertEqual(activity?.id, "rollout:turn-1")
         XCTAssertEqual(activity?.title, "alpha-project")
+        XCTAssertEqual(activity?.chatGPTThreadID, "session-1")
         XCTAssertEqual(activity?.state, .working)
         XCTAssertEqual(activity?.startedAt, Date(timeIntervalSince1970: 1_700_000_000))
 
         let completed = Data(#"{"type":"event_msg","payload":{"type":"task_complete","turn_id":"turn-1"}}"#.utf8)
         XCTAssertNil(CodexSessionActivityScanner.parse(data: activityData + Data("\n".utf8) + completed, updatedAt: now, now: now))
+    }
+
+    func testCodexActivityDeepLinkUsesChatGPTThreadID() {
+        let activity = CodexActivity(
+            id: "rollout:turn-1",
+            title: "Token Menu",
+            chatGPTThreadID: "session/1",
+            state: .working,
+            startedAt: nil,
+            updatedAt: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+
+        XCTAssertEqual(
+            CodexActivityNavigator.threadURL(for: activity)?.absoluteString,
+            "codex://threads/session%2F1"
+        )
     }
 
     func testCodexParserSelectsCodexBucket() throws {

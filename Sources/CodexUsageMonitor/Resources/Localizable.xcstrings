@@ -12,6 +12,7 @@
     "action.refresh_provider" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Refresh Provider Now"}},"ko":{"stringUnit":{"state":"translated","value":"지금 확인"}}}},
     "app.title" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"AI Usage"}},"ko":{"stringUnit":{"state":"translated","value":"AI 사용량"}}}},
     "activity.title" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Current Codex Task"}},"ko":{"stringUnit":{"state":"translated","value":"현재 Codex 작업"}}}},
+    "activity.open_hint" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Open this task in ChatGPT"}},"ko":{"stringUnit":{"state":"translated","value":"ChatGPT에서 이 작업 열기"}}}},
     "activity.working" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Working"}},"ko":{"stringUnit":{"state":"translated","value":"작업 중"}}}},
     "activity.waiting_approval" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Waiting for approval"}},"ko":{"stringUnit":{"state":"translated","value":"승인 대기"}}}},
     "activity.waiting_input" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Waiting for input"}},"ko":{"stringUnit":{"state":"translated","value":"입력 대기"}}}},

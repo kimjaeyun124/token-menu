@@ -205,34 +205,43 @@ private struct CodexActivityView: View {
     let label: String
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
-            HStack(alignment: .top, spacing: 8) {
-                Image(systemName: iconName)
-                    .foregroundStyle(iconColor)
-                    .frame(width: 15)
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack {
-                        Text(label)
-                            .font(.system(size: 12, weight: .semibold))
-                        Spacer()
-                        Text(settingsStore.localized(activity.state.localizationKey))
-                            .font(.system(size: 11, weight: .medium))
+        Button {
+            CodexActivityNavigator.open(activity)
+        } label: {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: iconName)
+                        .foregroundStyle(iconColor)
+                        .frame(width: 15)
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack {
+                            Text(label)
+                                .font(.system(size: 12, weight: .semibold))
+                            Spacer()
+                            Text(settingsStore.localized(activity.state.localizationKey))
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.secondary)
+                        }
+                        if let title = activity.title {
+                            Text(title)
+                                .font(.system(size: 11))
+                                .lineLimit(1)
+                                .foregroundStyle(.secondary)
+                        }
+                        Text(elapsedText(at: context.date))
+                            .font(.system(size: 11, weight: .medium, design: .monospaced))
                             .foregroundStyle(.secondary)
                     }
-                    if let title = activity.title {
-                        Text(title)
-                            .font(.system(size: 11))
-                            .lineLimit(1)
-                            .foregroundStyle(.secondary)
-                    }
-                    Text(elapsedText(at: context.date))
-                        .font(.system(size: 11, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.secondary)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(accessibilityText(at: context.date))
             }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(accessibilityText(at: context.date))
         }
+        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityHint(settingsStore.localized("activity.open_hint"))
     }
 
     private var iconName: String {
@@ -270,7 +279,8 @@ private struct CodexActivityView: View {
     }
 
     private func accessibilityText(at now: Date) -> String {
-        "\(settingsStore.localized("activity.title")), \(settingsStore.localized(activity.state.localizationKey)), \(elapsedText(at: now))"
+        let taskName = activity.title.map { ", \($0)" } ?? ""
+        return "\(settingsStore.localized("activity.title"))\(taskName), \(settingsStore.localized(activity.state.localizationKey)), \(elapsedText(at: now))"
     }
 }
 
