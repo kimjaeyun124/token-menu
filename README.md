@@ -27,9 +27,9 @@ Token Menu shows service-provided usage limits, not estimated token counts. Miss
 
 If Codex exposes a monthly allowance for the signed-in plan, Token Menu displays that service-provided window too. It never fabricates a monthly value when the current Codex response does not include one.
 
-When the Codex app-server daemon is available, the usage popover also shows the currently active task, its waiting state, and elapsed time. This connection is read-only and does not send prompts or modify Codex tasks.
+When the Codex app-server daemon is available, the usage popover also shows every currently active task, its waiting state, and elapsed time. This connection is read-only and does not send prompts or modify Codex tasks.
 
-When the desktop Codex client uses a separate stdio server, Token Menu also checks local session lifecycle markers to detect an active turn. Prompt and tool contents are never read.
+When the desktop Codex client uses a separate stdio server, Token Menu also checks local session lifecycle markers to detect active turns. Multiple active turns are listed separately with their workspace names. Prompt and tool contents are never read.
 
 ## Service support
 

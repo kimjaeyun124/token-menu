@@ -15,8 +15,8 @@ struct UsageWindowView: View {
             Text(settingsStore.localized("app.title"))
                 .font(.system(size: 16, weight: .semibold))
 
-            if let activity = activityMonitor.snapshot.primary {
-                CodexActivityView(activity: activity)
+            if !activityMonitor.snapshot.activities.isEmpty {
+                CodexActivityListView(activities: activityMonitor.snapshot.activities)
                 Divider()
             }
 
@@ -175,9 +175,34 @@ struct UsageWindowView: View {
     }
 }
 
+private struct CodexActivityListView: View {
+    @EnvironmentObject private var settingsStore: SettingsStore
+    let activities: [CodexActivity]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(activities.enumerated()), id: \.element.id) { index, activity in
+                CodexActivityView(
+                    activity: activity,
+                    label: activityLabel(index: index, total: activities.count)
+                )
+                if index < activities.count - 1 {
+                    Divider()
+                }
+            }
+        }
+    }
+
+    private func activityLabel(index: Int, total: Int) -> String {
+        let title = settingsStore.localized("activity.title")
+        return total > 1 ? "\(title) \(index + 1)" : title
+    }
+}
+
 private struct CodexActivityView: View {
     @EnvironmentObject private var settingsStore: SettingsStore
     let activity: CodexActivity
+    let label: String
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -187,7 +212,7 @@ private struct CodexActivityView: View {
                     .frame(width: 15)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack {
-                        Text(settingsStore.localized("activity.title"))
+                        Text(label)
                             .font(.system(size: 12, weight: .semibold))
                         Spacer()
                         Text(settingsStore.localized(activity.state.localizationKey))

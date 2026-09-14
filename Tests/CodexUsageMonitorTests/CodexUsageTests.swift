@@ -80,6 +80,7 @@ final class CodexUsageTests: XCTestCase {
     func testCodexSessionScannerFindsUnfinishedDesktopTurnWithoutReadingPrompt() throws {
         let now = Date(timeIntervalSince1970: 1_700_000_100)
         let data = Data(#"""
+        {"type":"session_meta","payload":{"cwd":"/Users/example/alpha-project"}}
         {"type":"event_msg","payload":{"type":"task_started","turn_id":"turn-1","started_at":1700000000}}
         {"type":"response_item","payload":{"type":"message","content":[{"text":"private prompt"}]}}
         {"type":"event_msg","payload":{"type":"item_completed","item":{"type":"Reasoning"}}}
@@ -90,6 +91,7 @@ final class CodexUsageTests: XCTestCase {
         let activityData = Data(repeating: 0x20, count: 300 * 1024) + Data("\n".utf8) + data
         let activity = CodexSessionActivityScanner.parse(data: activityData, updatedAt: now, now: now)
         XCTAssertEqual(activity?.id, "rollout:turn-1")
+        XCTAssertEqual(activity?.title, "alpha-project")
         XCTAssertEqual(activity?.state, .working)
         XCTAssertEqual(activity?.startedAt, Date(timeIntervalSince1970: 1_700_000_000))
 

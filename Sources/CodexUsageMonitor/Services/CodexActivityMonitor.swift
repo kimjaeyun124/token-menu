@@ -174,19 +174,28 @@ enum CodexSessionActivityScanner {
 
         let startedMarker = Data(#""type":"task_started""#.utf8)
         let completedMarker = Data(#""type":"task_complete""#.utf8)
+        let sessionMarker = Data(#""type":"session_meta""#.utf8)
+        var sessionTitle: String?
         for line in data.split(separator: 0x0A) {
             // Avoid JSON decoding prompt, tool, and token events. Lifecycle
             // markers are the only records needed for activity detection.
-            guard line.range(of: startedMarker) != nil || line.range(of: completedMarker) != nil else {
+            guard line.range(of: startedMarker) != nil
+                || line.range(of: completedMarker) != nil
+                || line.range(of: sessionMarker) != nil else {
                 continue
             }
             guard
                 let object = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any],
-                let payload = object["payload"] as? [String: Any],
-                let type = payload["type"] as? String
+                let payload = object["payload"] as? [String: Any]
             else { continue }
+            let type = (payload["type"] as? String) ?? (object["type"] as? String)
+            guard let type else { continue }
 
             switch type {
+            case "session_meta":
+                if let cwd = payload["cwd"] as? String {
+                    sessionTitle = workspaceName(from: cwd)
+                }
             case "task_started":
                 activeTurnID = payload["turn_id"] as? String
                 if let seconds = payload["started_at"] as? NSNumber {
@@ -207,11 +216,18 @@ enum CodexSessionActivityScanner {
         guard let activeTurnID else { return nil }
         return CodexActivity(
             id: "rollout:\(activeTurnID)",
-            title: nil,
+            title: sessionTitle,
             state: .working,
             startedAt: startedAt,
             updatedAt: updatedAt
         )
+    }
+
+    private static func workspaceName(from path: String) -> String? {
+        let name = URL(fileURLWithPath: path).lastPathComponent
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, name != "/" else { return nil }
+        return String(name.prefix(80))
     }
 
     private static func readLifecycleData(of url: URL) throws -> Data {
