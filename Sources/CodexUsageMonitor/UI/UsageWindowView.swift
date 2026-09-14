@@ -215,19 +215,26 @@ private struct CodexActivityView: View {
                         .frame(width: 15)
                     VStack(alignment: .leading, spacing: 2) {
                         HStack {
-                            Text(label)
-                                .font(.system(size: 12, weight: .semibold))
+                            if let title = activity.title {
+                                Text(title)
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.75)
+                                    .foregroundStyle(.primary)
+                            } else {
+                                Text(label)
+                                    .font(.system(size: 12, weight: .semibold))
+                            }
                             Spacer()
                             Text(settingsStore.localized(activity.state.localizationKey))
                                 .font(.system(size: 11, weight: .medium))
                                 .foregroundStyle(.secondary)
                         }
-                        if let title = activity.title {
-                            Text(title)
-                                .font(.system(size: 13, weight: .semibold))
+                        if activity.title != nil {
+                            Text(label)
+                                .font(.system(size: 11, weight: .medium))
                                 .lineLimit(1)
-                                .minimumScaleFactor(0.8)
-                                .foregroundStyle(.primary)
+                                .foregroundStyle(.secondary)
                         }
                         Text(elapsedText(at: context.date))
                             .font(.system(size: 11, weight: .medium, design: .monospaced))
