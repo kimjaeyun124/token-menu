@@ -6,6 +6,7 @@ enum CodexActivityState: Equatable, Sendable {
     case working
     case waitingForApproval
     case waitingForInput
+    case completed
     case error
 
     var localizationKey: String {
@@ -13,6 +14,7 @@ enum CodexActivityState: Equatable, Sendable {
         case .working: return "activity.working"
         case .waitingForApproval: return "activity.waiting_approval"
         case .waitingForInput: return "activity.waiting_input"
+        case .completed: return "activity.completed"
         case .error: return "activity.error"
         }
     }
@@ -178,6 +180,8 @@ enum CodexSessionActivityScanner {
         var activeTurnID: String?
         var startedAt: Date?
         var chatGPTThreadID: String?
+        var completedTurnID: String?
+        var completedStartedAt: Date?
 
         let startedMarker = Data(#""type":"task_started""#.utf8)
         let completedMarker = Data(#""type":"task_complete""#.utf8)
@@ -207,6 +211,8 @@ enum CodexSessionActivityScanner {
                 }
             case "task_started":
                 activeTurnID = payload["turn_id"] as? String
+                completedTurnID = nil
+                completedStartedAt = nil
                 if let seconds = payload["started_at"] as? NSNumber {
                     startedAt = Date(timeIntervalSince1970: seconds.doubleValue)
                 } else {
@@ -214,6 +220,8 @@ enum CodexSessionActivityScanner {
                 }
             case "task_complete":
                 if activeTurnID == (payload["turn_id"] as? String) {
+                    completedTurnID = activeTurnID
+                    completedStartedAt = startedAt
                     activeTurnID = nil
                     startedAt = nil
                 }
@@ -222,13 +230,23 @@ enum CodexSessionActivityScanner {
             }
         }
 
-        guard let activeTurnID else { return nil }
+        if let activeTurnID {
+            return CodexActivity(
+                id: "rollout:\(activeTurnID)",
+                title: sessionTitle,
+                chatGPTThreadID: chatGPTThreadID,
+                state: .working,
+                startedAt: startedAt,
+                updatedAt: updatedAt
+            )
+        }
+        guard let completedTurnID else { return nil }
         return CodexActivity(
-            id: "rollout:\(activeTurnID)",
+            id: "rollout:\(completedTurnID)",
             title: sessionTitle,
             chatGPTThreadID: chatGPTThreadID,
-            state: .working,
-            startedAt: startedAt,
+            state: .completed,
+            startedAt: completedStartedAt,
             updatedAt: updatedAt
         )
     }
@@ -309,6 +327,8 @@ final class CodexActivityMonitor: ObservableObject {
     private var task: Task<Void, Never>?
     private let socketPath: String
     private let sessionsDirectory: URL
+    private var retainedActivities: [String: CodexActivity] = [:]
+    private var acknowledgedActivityIDs = Set<String>()
 
     init(
         socketPath: String = FileManager.default.homeDirectoryForCurrentUser
@@ -334,7 +354,20 @@ final class CodexActivityMonitor: ObservableObject {
     func stop() {
         task?.cancel()
         task = nil
+        retainedActivities.removeAll()
+        acknowledgedActivityIDs.removeAll()
         snapshot = .unavailable()
+    }
+
+    /// Removes a completed task after the user has opened it in ChatGPT.
+    func acknowledge(_ activity: CodexActivity) {
+        acknowledgedActivityIDs.insert(activity.id)
+        retainedActivities.removeValue(forKey: activity.id)
+        snapshot = CodexActivitySnapshot(
+            activities: snapshot.activities.filter { $0.id != activity.id },
+            isConnected: snapshot.isConnected,
+            lastUpdated: snapshot.lastUpdated
+        )
     }
 
     var primaryElapsedSeconds: TimeInterval? {
@@ -349,7 +382,10 @@ final class CodexActivityMonitor: ObservableObject {
                 let socketActivities = try await client.fetchActiveActivities()
                 let fileActivities = CodexSessionActivityScanner.scan(sessionsDirectory: sessionsDirectory)
                 snapshot = CodexActivitySnapshot(
-                    activities: merge(socketActivities, with: fileActivities),
+                    activities: updateRetainedActivities(
+                        with: merge(socketActivities, with: fileActivities),
+                        connectionIsHealthy: true
+                    ),
                     isConnected: true,
                     lastUpdated: Date()
                 )
@@ -360,7 +396,10 @@ final class CodexActivityMonitor: ObservableObject {
             } catch {
                 let fallbackActivities = CodexSessionActivityScanner.scan(sessionsDirectory: sessionsDirectory)
                 snapshot = CodexActivitySnapshot(
-                    activities: fallbackActivities,
+                    activities: updateRetainedActivities(
+                        with: fallbackActivities,
+                        connectionIsHealthy: false
+                    ),
                     isConnected: false,
                     lastUpdated: Date()
                 )
@@ -374,6 +413,54 @@ final class CodexActivityMonitor: ObservableObject {
         let existingIDs = Set(result.map(\.id))
         result.append(contentsOf: fileActivities.filter { !existingIDs.contains($0.id) })
         return result.sorted { ($0.startedAt ?? $0.updatedAt) > ($1.startedAt ?? $1.updatedAt) }
+    }
+
+    private func updateRetainedActivities(
+        with incoming: [CodexActivity],
+        connectionIsHealthy: Bool
+    ) -> [CodexActivity] {
+        // A newly active turn is a new confirmation cycle, even when the
+        // app-server reuses the same thread ID.
+        for activity in incoming where activity.state != .completed {
+            acknowledgedActivityIDs.remove(activity.id)
+        }
+        let visibleIncoming = incoming.filter {
+            !(acknowledgedActivityIDs.contains($0.id) && $0.state == .completed)
+        }
+        let incomingIDs = Set(visibleIncoming.map(\.id))
+        if connectionIsHealthy {
+            for previous in snapshot.activities where !incomingIDs.contains(previous.id) {
+                guard previous.state != .completed else { continue }
+                retainedActivities[previous.id] = CodexActivity(
+                    id: previous.id,
+                    title: previous.title,
+                    chatGPTThreadID: previous.chatGPTThreadID,
+                    state: .completed,
+                    startedAt: previous.startedAt,
+                    updatedAt: Date()
+                )
+            }
+        } else {
+            // A socket interruption is not evidence that Codex finished the
+            // task. Keep the last known active row until a healthy poll can
+            // confirm completion.
+            for previous in snapshot.activities where !incomingIDs.contains(previous.id) {
+                retainedActivities[previous.id] = previous
+            }
+        }
+
+        for activity in visibleIncoming {
+            if activity.state == .completed {
+                retainedActivities[activity.id] = activity
+            } else {
+                retainedActivities.removeValue(forKey: activity.id)
+            }
+        }
+
+        let retained = retainedActivities.values.filter { !incomingIDs.contains($0.id) }
+        return (visibleIncoming + retained).sorted {
+            ($0.startedAt ?? $0.updatedAt) > ($1.startedAt ?? $1.updatedAt)
+        }
     }
 }
 

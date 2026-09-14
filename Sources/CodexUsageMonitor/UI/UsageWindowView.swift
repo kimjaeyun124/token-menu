@@ -210,11 +210,15 @@ private struct CodexActivityListView: View {
 
 private struct CodexActivityView: View {
     @EnvironmentObject private var settingsStore: SettingsStore
+    @EnvironmentObject private var activityMonitor: CodexActivityMonitor
     let activity: CodexActivity
     let label: String
 
     var body: some View {
         Button {
+            if activity.state == .completed {
+                activityMonitor.acknowledge(activity)
+            }
             CodexActivityNavigator.open(activity)
         } label: {
             TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -266,6 +270,7 @@ private struct CodexActivityView: View {
         case .working: return "arrow.triangle.2.circlepath"
         case .waitingForApproval: return "checkmark.shield"
         case .waitingForInput: return "text.bubble"
+        case .completed: return "checkmark.circle.fill"
         case .error: return "exclamationmark.triangle"
         }
     }
@@ -274,6 +279,7 @@ private struct CodexActivityView: View {
         switch activity.state {
         case .working: return .accentColor
         case .waitingForApproval, .waitingForInput: return .orange
+        case .completed: return .green
         case .error: return .red
         }
     }

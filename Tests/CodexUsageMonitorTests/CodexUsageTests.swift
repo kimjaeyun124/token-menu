@@ -98,7 +98,14 @@ final class CodexUsageTests: XCTestCase {
         XCTAssertEqual(activity?.startedAt, Date(timeIntervalSince1970: 1_700_000_000))
 
         let completed = Data(#"{"type":"event_msg","payload":{"type":"task_complete","turn_id":"turn-1"}}"#.utf8)
-        XCTAssertNil(CodexSessionActivityScanner.parse(data: activityData + Data("\n".utf8) + completed, updatedAt: now, now: now))
+        let completedActivity = CodexSessionActivityScanner.parse(
+            data: activityData + Data("\n".utf8) + completed,
+            updatedAt: now,
+            now: now
+        )
+        XCTAssertEqual(completedActivity?.id, "rollout:turn-1")
+        XCTAssertEqual(completedActivity?.state, .completed)
+        XCTAssertEqual(completedActivity?.chatGPTThreadID, "session-1")
     }
 
     func testCodexActivityDeepLinkUsesChatGPTThreadID() {

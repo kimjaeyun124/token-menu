@@ -17,6 +17,7 @@
     "activity.working" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Working"}},"ko":{"stringUnit":{"state":"translated","value":"작업 중"}}}},
     "activity.waiting_approval" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Waiting for approval"}},"ko":{"stringUnit":{"state":"translated","value":"승인 대기"}}}},
     "activity.waiting_input" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Waiting for input"}},"ko":{"stringUnit":{"state":"translated","value":"입력 대기"}}}},
+    "activity.completed" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Completed"}},"ko":{"stringUnit":{"state":"translated","value":"완료됨"}}}},
     "activity.error" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Needs attention"}},"ko":{"stringUnit":{"state":"translated","value":"확인 필요"}}}},
     "activity.elapsed" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Elapsed time"}},"ko":{"stringUnit":{"state":"translated","value":"경과 시간"}}}},
     "activity.elapsed_unavailable" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Elapsed time unavailable"}},"ko":{"stringUnit":{"state":"translated","value":"경과 시간 확인 불가"}}}},
