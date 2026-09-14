@@ -15,10 +15,19 @@ struct UsageWindowView: View {
             Text(settingsStore.localized("app.title"))
                 .font(.system(size: 16, weight: .semibold))
 
-            if !activityMonitor.snapshot.activities.isEmpty {
+            if activityMonitor.snapshot.activities.isEmpty {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(settingsStore.localized("activity.title"))
+                        .font(.system(size: 12, weight: .semibold))
+                    Text(settingsStore.localized("activity.none"))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
                 CodexActivityListView(activities: activityMonitor.snapshot.activities)
-                Divider()
             }
+            Divider()
 
             if providers.isEmpty {
                 Text(settingsStore.localized("status.no_providers"))
