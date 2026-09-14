@@ -124,6 +124,20 @@ final class CodexUsageTests: XCTestCase {
         )
     }
 
+    func testClaudeActivityScannerFindsClaudeProcessesOnly() {
+        let activities = ClaudeCodeActivityScanner.scan(
+            now: Date(timeIntervalSince1970: 1_700_000_000),
+            processOutput: """
+            101 /usr/local/bin/claude --resume
+            102 /bin/zsh -lc claude
+            103 /opt/homebrew/bin/claude-code
+            """
+        )
+
+        XCTAssertEqual(activities.map(\.id), ["claude:101", "claude:103"])
+        XCTAssertTrue(activities.allSatisfy { $0.provider == .claudeCode && $0.state == .working })
+    }
+
     func testCodexParserSelectsCodexBucket() throws {
         let data = Data(#"""
         {"id":2,"result":{"rateLimits":{"primary":{"usedPercent":99,"windowDurationMins":300}},

@@ -27,9 +27,28 @@ struct CodexActivity: Equatable, Sendable, Identifiable {
     /// This is separate from `id` because rollout activities use a turn-based
     /// identity to deduplicate files while their ChatGPT target is session-based.
     let chatGPTThreadID: String?
+    let provider: AIProvider
     let state: CodexActivityState
     let startedAt: Date?
     let updatedAt: Date
+
+    init(
+        id: String,
+        title: String?,
+        chatGPTThreadID: String? = nil,
+        provider: AIProvider = .codex,
+        state: CodexActivityState,
+        startedAt: Date?,
+        updatedAt: Date
+    ) {
+        self.id = id
+        self.title = title
+        self.chatGPTThreadID = chatGPTThreadID
+        self.provider = provider
+        self.state = state
+        self.startedAt = startedAt
+        self.updatedAt = updatedAt
+    }
 }
 
 struct CodexActivitySnapshot: Equatable, Sendable {
@@ -320,6 +339,48 @@ enum CodexSessionActivityScanner {
     }
 }
 
+/// Detects Claude Code's foreground CLI sessions. Claude Code is a terminal
+/// process rather than a LaunchServices app, so `ps` is the reliable source
+/// for discovering it. No prompt or command contents are read.
+enum ClaudeCodeActivityScanner {
+    static func scan(
+        now: Date = Date(),
+        processOutput: String? = nil
+    ) -> [CodexActivity] {
+        let output: String
+        if let processOutput {
+            output = processOutput
+        } else {
+            output = (try? ProcessRunner.run(
+                executableURL: URL(fileURLWithPath: "/bin/ps"),
+                arguments: ["-axo", "pid=,command="]
+            ).standardOutput) ?? ""
+        }
+
+        return output.split(separator: "\n").compactMap { line in
+            let parts = line.split(maxSplits: 1, whereSeparator: { $0 == " " || $0 == "\t" })
+            guard parts.count == 2,
+                  let pid = Int32(parts[0]),
+                  isClaudeCommand(String(parts[1]) ) else { return nil }
+            return CodexActivity(
+                id: "claude:\(pid)",
+                title: "Claude Code",
+                provider: .claudeCode,
+                state: .working,
+                startedAt: nil,
+                updatedAt: now
+            )
+        }
+        .sorted { $0.id < $1.id }
+    }
+
+    private static func isClaudeCommand(_ command: String) -> Bool {
+        let executable = command.split(whereSeparator: { $0 == " " || $0 == "\t" }).first.map(String.init) ?? ""
+        let name = URL(fileURLWithPath: executable).lastPathComponent.lowercased()
+        return name == "claude" || name == "claude-code"
+    }
+}
+
 @MainActor
 final class CodexActivityMonitor: ObservableObject {
     @Published private(set) var snapshot = CodexActivitySnapshot.unavailable()
@@ -381,9 +442,10 @@ final class CodexActivityMonitor: ObservableObject {
                 let client = try await CodexActivityClient(socketPath: socketPath)
                 let socketActivities = try await client.fetchActiveActivities()
                 let fileActivities = CodexSessionActivityScanner.scan(sessionsDirectory: sessionsDirectory)
+                let claudeActivities = ClaudeCodeActivityScanner.scan()
                 snapshot = CodexActivitySnapshot(
                     activities: updateRetainedActivities(
-                        with: merge(socketActivities, with: fileActivities),
+                        with: merge(socketActivities, fileActivities: fileActivities + claudeActivities),
                         connectionIsHealthy: true
                     ),
                     isConnected: true,
@@ -395,9 +457,10 @@ final class CodexActivityMonitor: ObservableObject {
                 return
             } catch {
                 let fallbackActivities = CodexSessionActivityScanner.scan(sessionsDirectory: sessionsDirectory)
+                let claudeActivities = ClaudeCodeActivityScanner.scan()
                 snapshot = CodexActivitySnapshot(
                     activities: updateRetainedActivities(
-                        with: fallbackActivities,
+                        with: merge([], fileActivities: fallbackActivities + claudeActivities),
                         connectionIsHealthy: false
                     ),
                     isConnected: false,
@@ -408,7 +471,7 @@ final class CodexActivityMonitor: ObservableObject {
         }
     }
 
-    private func merge(_ socketActivities: [CodexActivity], with fileActivities: [CodexActivity]) -> [CodexActivity] {
+    private func merge(_ socketActivities: [CodexActivity], fileActivities: [CodexActivity]) -> [CodexActivity] {
         var result = socketActivities
         let existingIDs = Set(result.map(\.id))
         result.append(contentsOf: fileActivities.filter { !existingIDs.contains($0.id) })
@@ -435,6 +498,7 @@ final class CodexActivityMonitor: ObservableObject {
                     id: previous.id,
                     title: previous.title,
                     chatGPTThreadID: previous.chatGPTThreadID,
+                    provider: previous.provider,
                     state: .completed,
                     startedAt: previous.startedAt,
                     updatedAt: Date()

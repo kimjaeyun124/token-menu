@@ -12,14 +12,12 @@ struct UsageWindowView: View {
         let settings = settingsStore.settings
 
         VStack(alignment: .leading, spacing: settings.popoverSize == .compact ? 9 : 13) {
-            Text(settingsStore.localized("app.title"))
+            Text(settingsStore.localized("active_ai.title"))
                 .font(.system(size: 16, weight: .semibold))
 
             if activityMonitor.snapshot.activities.isEmpty {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(settingsStore.localized("activity.title"))
-                        .font(.system(size: 12, weight: .semibold))
-                    Text(settingsStore.localized("activity.none"))
+                    Text(settingsStore.localized("active_ai.none"))
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }
@@ -28,6 +26,9 @@ struct UsageWindowView: View {
                 CodexActivityListView(activities: activityMonitor.snapshot.activities)
             }
             Divider()
+
+            Text(settingsStore.localized("app.title"))
+                .font(.system(size: 16, weight: .semibold))
 
             if providers.isEmpty {
                 Text(settingsStore.localized("status.no_providers"))
@@ -203,7 +204,10 @@ private struct CodexActivityListView: View {
     }
 
     private func activityLabel(index: Int, total: Int) -> String {
-        let title = settingsStore.localized("activity.title")
+        let key = activities[index].provider == .claudeCode
+            ? "activity.title_claude"
+            : "activity.title"
+        let title = settingsStore.localized(key)
         return total > 1 ? "\(title) \(index + 1)" : title
     }
 }
