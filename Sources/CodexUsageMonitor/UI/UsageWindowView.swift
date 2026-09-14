@@ -224,9 +224,10 @@ private struct CodexActivityView: View {
                         }
                         if let title = activity.title {
                             Text(title)
-                                .font(.system(size: 11))
+                                .font(.system(size: 13, weight: .semibold))
                                 .lineLimit(1)
-                                .foregroundStyle(.secondary)
+                                .minimumScaleFactor(0.8)
+                                .foregroundStyle(.primary)
                         }
                         Text(elapsedText(at: context.date))
                             .font(.system(size: 11, weight: .medium, design: .monospaced))
