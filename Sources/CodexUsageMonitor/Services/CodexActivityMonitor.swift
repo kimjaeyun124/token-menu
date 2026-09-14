@@ -147,22 +147,39 @@ enum CodexSessionActivityScanner {
             options: [.skipsHiddenFiles]
         ) else { return [] }
 
-        return enumerator.compactMap { item -> CodexActivity? in
+        let candidates = enumerator.compactMap { item -> (URL, Date)? in
             guard let url = item as? URL, url.pathExtension == "jsonl" else { return nil }
             guard let resourceValues = try? url.resourceValues(forKeys: [.contentModificationDateKey]),
                   let modifiedAt = resourceValues.contentModificationDate,
-                  now.timeIntervalSince(modifiedAt) <= freshness,
-                  let data = try? readLifecycleData(of: url) else { return nil }
-            return parse(data: data, updatedAt: modifiedAt, now: now)
+                  now.timeIntervalSince(modifiedAt) <= freshness else { return nil }
+            return (url, modifiedAt)
         }
-        .sorted { ($0.startedAt ?? $0.updatedAt) > ($1.startedAt ?? $1.updatedAt) }
+
+        // Most rollout files are historical and can be very large. Only the
+        // most recently modified candidates can contain a live turn, keeping
+        // the menu-bar refresh responsive even with a long session history.
+        return candidates
+            .sorted { $0.1 > $1.1 }
+            .prefix(20)
+            .compactMap { url, modifiedAt in
+                guard let data = try? readLifecycleData(of: url) else { return nil }
+                return parse(data: data, updatedAt: modifiedAt, now: now)
+            }
+            .sorted { ($0.startedAt ?? $0.updatedAt) > ($1.startedAt ?? $1.updatedAt) }
     }
 
     static func parse(data: Data, updatedAt: Date, now: Date = Date()) -> CodexActivity? {
         var activeTurnID: String?
         var startedAt: Date?
 
+        let startedMarker = Data(#""type":"task_started""#.utf8)
+        let completedMarker = Data(#""type":"task_complete""#.utf8)
         for line in data.split(separator: 0x0A) {
+            // Avoid JSON decoding prompt, tool, and token events. Lifecycle
+            // markers are the only records needed for activity detection.
+            guard line.range(of: startedMarker) != nil || line.range(of: completedMarker) != nil else {
+                continue
+            }
             guard
                 let object = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any],
                 let payload = object["payload"] as? [String: Any],
