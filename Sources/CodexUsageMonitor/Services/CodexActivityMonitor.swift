@@ -431,6 +431,24 @@ final class CodexActivityMonitor: ObservableObject {
         )
     }
 
+    /// Clears all completed rows when the user brings the ChatGPT desktop app
+    /// forward to review their work.
+    func acknowledgeCompletedActivities() {
+        let completedIDs = Set(snapshot.activities.compactMap { activity in
+            activity.state == .completed ? activity.id : nil
+        })
+        guard !completedIDs.isEmpty else { return }
+        acknowledgedActivityIDs.formUnion(completedIDs)
+        for id in completedIDs {
+            retainedActivities.removeValue(forKey: id)
+        }
+        snapshot = CodexActivitySnapshot(
+            activities: snapshot.activities.filter { !completedIDs.contains($0.id) },
+            isConnected: snapshot.isConnected,
+            lastUpdated: snapshot.lastUpdated
+        )
+    }
+
     var primaryElapsedSeconds: TimeInterval? {
         guard let startedAt = snapshot.primary?.startedAt else { return nil }
         return max(0, Date().timeIntervalSince(startedAt))
@@ -494,6 +512,13 @@ final class CodexActivityMonitor: ObservableObject {
         if connectionIsHealthy {
             for previous in snapshot.activities where !incomingIDs.contains(previous.id) {
                 guard previous.state != .completed else { continue }
+                // A project can have multiple back-to-back turns. If another
+                // turn in the same project is still active, suppress the old
+                // row instead of falsely showing a completed task beside it.
+                guard !incoming.contains(where: { incomingActivity in
+                    incomingActivity.state != .completed
+                        && sameWorkspace(previous, incomingActivity)
+                }) else { continue }
                 retainedActivities[previous.id] = CodexActivity(
                     id: previous.id,
                     title: previous.title,
@@ -518,13 +543,30 @@ final class CodexActivityMonitor: ObservableObject {
                 retainedActivities[activity.id] = activity
             } else {
                 retainedActivities.removeValue(forKey: activity.id)
+                retainedActivities = retainedActivities.filter { _, retained in
+                    !sameWorkspace(retained, activity)
+                }
             }
         }
 
-        let retained = retainedActivities.values.filter { !incomingIDs.contains($0.id) }
+        let retained = retainedActivities.values.filter { retained in
+            !incomingIDs.contains(retained.id)
+                && !visibleIncoming.contains(where: { incomingActivity in
+                    incomingActivity.state != .completed
+                        && sameWorkspace(retained, incomingActivity)
+                })
+        }
         return (visibleIncoming + retained).sorted {
             ($0.startedAt ?? $0.updatedAt) > ($1.startedAt ?? $1.updatedAt)
         }
+    }
+
+    private func sameWorkspace(_ lhs: CodexActivity, _ rhs: CodexActivity) -> Bool {
+        guard lhs.provider == rhs.provider,
+              let lhsTitle = lhs.title?.trimmingCharacters(in: .whitespacesAndNewlines),
+              let rhsTitle = rhs.title?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !lhsTitle.isEmpty, !rhsTitle.isEmpty else { return false }
+        return lhsTitle.caseInsensitiveCompare(rhsTitle) == .orderedSame
     }
 }
 
