@@ -168,6 +168,8 @@
     "limit.weekly" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Weekly"}},"ko":{"stringUnit":{"state":"translated","value":"주간"}}}},
     "limit.monthly" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Monthly"}},"ko":{"stringUnit":{"state":"translated","value":"월간"}}}},
     "notification.body" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"%@: %@ remaining"}},"ko":{"stringUnit":{"state":"translated","value":"%@ 남은 사용량: %@"}}}},
+    "notification.activity_completed_title" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Codex task completed"}},"ko":{"stringUnit":{"state":"translated","value":"Codex 작업이 완료되었습니다"}}}},
+    "notification.activity_completed_body" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"%@ is ready to review in ChatGPT."}},"ko":{"stringUnit":{"state":"translated","value":"%@ 작업을 ChatGPT에서 확인할 수 있습니다."}}}},
     "notification.title" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"%@ usage is low"}},"ko":{"stringUnit":{"state":"translated","value":"%@ 사용량이 부족합니다"}}}},
     "notifications.5h_below" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"5H Remaining Below: %d%%"}},"ko":{"stringUnit":{"state":"translated","value":"5H 남은 사용량이 %d%% 아래일 때"}}}},
     "notifications.claude" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Claude Code Notifications"}},"ko":{"stringUnit":{"state":"translated","value":"Claude Code 알림"}}}},

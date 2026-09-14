@@ -1,6 +1,8 @@
 import AppKit
+import Combine
 import Network
 import OSLog
+import UserNotifications
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -8,6 +10,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let refreshService: UsageRefreshService
     let activityMonitor = CodexActivityMonitor()
     private var menuBarController: MenuBarController?
+    private var activityNotificationCancellable: AnyCancellable?
+    private var notifiedActivityIDs = Set<String>()
+    private var hasInitializedActivityNotifications = false
     private var wakeObserver: NSObjectProtocol?
     private let connectivityMonitor = ConnectivityMonitor()
     private let logger = Logger(subsystem: "com.kimjaeyun.codexusagemonitor", category: "Lifecycle")
@@ -51,6 +56,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.menuBarController = menuBarController
         visibility.configure(menuBarController: menuBarController, refreshService: refreshService)
         visibility.applyStoredSettings()
+        activityNotificationCancellable = activityMonitor.$snapshot
+            .sink { [weak self] snapshot in
+                self?.handleActivitySnapshot(snapshot)
+            }
+        if settingsStore.settings.notificationsEnabled {
+            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        }
         refreshService.start()
         activityMonitor.start()
         let isLoginLaunch = ProcessInfo.processInfo.arguments.contains("--background-login")
@@ -74,6 +86,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async { visibility.showUsage() }
         }
         logger.notice("Menu bar launch complete; login launch: \(isLoginLaunch)")
+    }
+
+    private func handleActivitySnapshot(_ snapshot: CodexActivitySnapshot) {
+        // The monitor publishes an unavailable empty snapshot before its
+        // first poll. Do not treat that bootstrap value as a real baseline.
+        guard snapshot.isConnected || !snapshot.activities.isEmpty else { return }
+        let completedIDs = Set(snapshot.activities.compactMap { activity in
+            activity.state == .completed ? activity.id : nil
+        })
+        if !hasInitializedActivityNotifications {
+            notifiedActivityIDs = completedIDs
+            hasInitializedActivityNotifications = true
+            return
+        }
+
+        notifiedActivityIDs.formIntersection(
+            Set(snapshot.activities.map(\.id)).union(completedIDs)
+        )
+        guard settingsStore.settings.notificationsEnabled,
+              settingsStore.settings.preferences(for: .codex).notificationsEnabled else {
+            return
+        }
+
+        for activity in snapshot.activities where activity.state == .completed {
+            guard notifiedActivityIDs.insert(activity.id).inserted else { continue }
+            let content = UNMutableNotificationContent()
+            content.title = settingsStore.localized("notification.activity_completed_title")
+            let projectName = activity.title ?? settingsStore.localized("app.title")
+            content.body = String(
+                format: settingsStore.localized("notification.activity_completed_body"),
+                locale: settingsStore.settings.language.locale,
+                projectName
+            )
+            content.sound = .default
+            content.threadIdentifier = "codex-activity"
+            let request = UNNotificationRequest(
+                identifier: "activity-completed-\(activity.id)",
+                content: content,
+                trigger: nil
+            )
+            UNUserNotificationCenter.current().add(request)
+        }
     }
 
     func applicationShouldHandleReopen(
