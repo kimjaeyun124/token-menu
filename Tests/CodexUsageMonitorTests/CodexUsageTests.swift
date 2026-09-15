@@ -124,6 +124,18 @@ final class CodexUsageTests: XCTestCase {
         )
     }
 
+    func testCompletedActivityWithoutThreadIDHasNoSpecificResultDestination() {
+        let activity = CodexActivity(
+            id: "rollout:turn-without-thread",
+            title: "Token Menu",
+            state: .completed,
+            startedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            updatedAt: Date(timeIntervalSince1970: 1_700_000_125)
+        )
+
+        XCTAssertNil(CodexActivityNavigator.threadURL(for: activity))
+    }
+
     func testCompletedActivityElapsedTimeIsFrozenAtCompletionDate() {
         let startedAt = Date(timeIntervalSince1970: 1_700_000_000)
         let completedAt = startedAt.addingTimeInterval(125)
