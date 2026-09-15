@@ -124,6 +124,29 @@ final class CodexUsageTests: XCTestCase {
         )
     }
 
+    func testCompletedActivityElapsedTimeIsFrozenAtCompletionDate() {
+        let startedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let completedAt = startedAt.addingTimeInterval(125)
+        let completed = CodexActivity(
+            id: "rollout:turn-completed",
+            title: "Token Menu",
+            state: .completed,
+            startedAt: startedAt,
+            updatedAt: completedAt
+        )
+
+        XCTAssertEqual(completed.elapsedSeconds(at: completedAt.addingTimeInterval(3_600)), 125)
+
+        let working = CodexActivity(
+            id: "rollout:turn-working",
+            title: "Token Menu",
+            state: .working,
+            startedAt: startedAt,
+            updatedAt: completedAt
+        )
+        XCTAssertEqual(working.elapsedSeconds(at: completedAt.addingTimeInterval(3_600)), 3_725)
+    }
+
     func testActiveAIOrderingUsesSavedKeysAndKeepsNewTasksLast() {
         let now = Date(timeIntervalSince1970: 1_700_000_000)
         let newer = CodexActivity(
