@@ -16,10 +16,11 @@ enum CodexActivityNavigator {
     }
 
     @MainActor
-    static func open(_ activity: CodexActivity) {
+    @discardableResult
+    static func open(_ activity: CodexActivity) -> Bool {
         if let url = threadURL(for: activity), NSWorkspace.shared.open(url) {
             NSApp.activate(ignoringOtherApps: true)
-            return
+            return true
         }
 
         // Activities discovered from older or incomplete rollout records may
@@ -33,6 +34,10 @@ enum CodexActivityNavigator {
             NSWorkspace.shared.openApplication(at: appURL, configuration: configuration)
         }
         NSApp.activate(ignoringOtherApps: true)
+        // Opening the app shell is intentionally not considered opening a
+        // specific result page. Completed activities are acknowledged only
+        // after a task deep link succeeds.
+        return false
     }
 }
 

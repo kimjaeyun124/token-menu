@@ -233,10 +233,10 @@ private struct CodexActivityView: View {
 
     var body: some View {
         Button {
-            if activity.state == .completed {
+            let openedSpecificTask = CodexActivityNavigator.open(activity)
+            if activity.state == .completed, openedSpecificTask {
                 activityMonitor.acknowledge(activity)
             }
-            CodexActivityNavigator.open(activity)
         } label: {
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 HStack(alignment: .top, spacing: 8) {

@@ -14,7 +14,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var notifiedActivityIDs = Set<String>()
     private var hasInitializedActivityNotifications = false
     private var wakeObserver: NSObjectProtocol?
-    private var chatGPTActivationObserver: NSObjectProtocol?
     private let connectivityMonitor = ConnectivityMonitor()
     private let logger = Logger(subsystem: "com.kimjaeyun.codexusagemonitor", category: "Lifecycle")
 
@@ -77,16 +76,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             queue: .main
         ) { [weak refreshService] _ in
             Task { @MainActor in refreshService?.handleWake() }
-        }
-        chatGPTActivationObserver = NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.didActivateApplicationNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            guard let application = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
-                as? NSRunningApplication,
-                application.bundleIdentifier == "com.openai.codex" else { return }
-            Task { @MainActor in self?.activityMonitor.acknowledgeCompletedActivities() }
         }
         connectivityMonitor.start { [weak refreshService] in
             Task { @MainActor in refreshService?.handleNetworkReconnect() }

@@ -452,30 +452,12 @@ final class CodexActivityMonitor: ObservableObject {
         snapshot = .unavailable()
     }
 
-    /// Removes a completed task after the user has opened it in ChatGPT.
+    /// Removes only the task whose specific result page the user opened.
     func acknowledge(_ activity: CodexActivity) {
         acknowledgedActivityIDs.insert(activity.id)
         retainedActivities.removeValue(forKey: activity.id)
         snapshot = CodexActivitySnapshot(
             activities: snapshot.activities.filter { $0.id != activity.id },
-            isConnected: snapshot.isConnected,
-            lastUpdated: snapshot.lastUpdated
-        )
-    }
-
-    /// Clears all completed rows when the user brings the ChatGPT desktop app
-    /// forward to review their work.
-    func acknowledgeCompletedActivities() {
-        let completedIDs = Set(snapshot.activities.compactMap { activity in
-            activity.state == .completed ? activity.id : nil
-        })
-        guard !completedIDs.isEmpty else { return }
-        acknowledgedActivityIDs.formUnion(completedIDs)
-        for id in completedIDs {
-            retainedActivities.removeValue(forKey: id)
-        }
-        snapshot = CodexActivitySnapshot(
-            activities: snapshot.activities.filter { !completedIDs.contains($0.id) },
             isConnected: snapshot.isConnected,
             lastUpdated: snapshot.lastUpdated
         )
