@@ -218,6 +218,9 @@ private struct CodexActivityListView: View {
             ? "activity.title_claude"
             : "activity.title"
         let title = settingsStore.localized(key)
+        // A titled single task already identifies itself on the first line;
+        // reserve this secondary label for untitled tasks or numbered lists.
+        if total == 1, activities[index].title != nil { return "" }
         return total > 1 ? "\(title) \(index + 1)" : title
     }
 }
@@ -244,9 +247,9 @@ private struct CodexActivityView: View {
                         HStack {
                             if let title = activity.title {
                                 Text(title)
-                                    .font(.system(size: 15, weight: .semibold))
+                                    .font(.system(size: 17, weight: .semibold))
                                     .lineLimit(1)
-                                    .minimumScaleFactor(0.75)
+                                    .minimumScaleFactor(0.65)
                                     .foregroundStyle(.primary)
                             } else {
                                 Text(label)
@@ -257,7 +260,7 @@ private struct CodexActivityView: View {
                                 .font(.system(size: 11, weight: .medium))
                                 .foregroundStyle(.secondary)
                         }
-                        if activity.title != nil {
+                        if activity.title != nil, !label.isEmpty {
                             Text(label)
                                 .font(.system(size: 11, weight: .medium))
                                 .lineLimit(1)
