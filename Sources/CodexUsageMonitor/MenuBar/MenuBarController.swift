@@ -63,6 +63,7 @@ final class MenuBarController: NSObject {
 
     func showPopover() {
         guard let button = statusItem.button else { return }
+        activityMonitor.synchronizeDesktopReadState()
         updatePresentation()
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         popover.contentViewController?.view.window?.makeKey()

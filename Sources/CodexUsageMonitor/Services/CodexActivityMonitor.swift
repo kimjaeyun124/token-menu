@@ -420,6 +420,7 @@ final class CodexActivityMonitor: ObservableObject {
     private var task: Task<Void, Never>?
     private let socketPath: String
     private let sessionsDirectory: URL
+    private let desktopStateURL: URL
     private var retainedActivities: [String: CodexActivity] = [:]
     private var acknowledgedActivityIDs = Set<String>()
 
@@ -427,10 +428,13 @@ final class CodexActivityMonitor: ObservableObject {
         socketPath: String = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".codex/app-server-control/app-server-control.sock").path,
         sessionsDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".codex/sessions")
+            .appendingPathComponent(".codex/sessions"),
+        desktopStateURL: URL? = nil
     ) {
         self.socketPath = socketPath
         self.sessionsDirectory = sessionsDirectory
+        self.desktopStateURL = desktopStateURL ?? sessionsDirectory.deletingLastPathComponent()
+            .appendingPathComponent(".codex-global-state.json")
     }
 
     deinit {
@@ -452,8 +456,9 @@ final class CodexActivityMonitor: ObservableObject {
         snapshot = .unavailable()
     }
 
-    /// Removes only the task whose specific result page the user opened.
+    /// Removes only a completed task whose specific result page was opened.
     func acknowledge(_ activity: CodexActivity) {
+        guard activity.state == .completed else { return }
         acknowledgedActivityIDs.insert(activity.id)
         retainedActivities.removeValue(forKey: activity.id)
         snapshot = CodexActivitySnapshot(
@@ -467,6 +472,49 @@ final class CodexActivityMonitor: ObservableObject {
         snapshot.primary?.elapsedSeconds(at: Date())
     }
 
+    /// Apply the same desktop read receipts to both socket and rollout polls,
+    /// including retained completions that no longer appear in recent files.
+    func updateSnapshot(
+        with activities: [CodexActivity],
+        connectionIsHealthy: Bool,
+        at now: Date = Date()
+    ) {
+        let retained = updateRetainedActivities(
+            with: activities,
+            connectionIsHealthy: connectionIsHealthy,
+            at: now
+        )
+        snapshot = CodexActivitySnapshot(
+            activities: unreviewedActivities(retained, at: now),
+            isConnected: connectionIsHealthy,
+            lastUpdated: now
+        )
+    }
+
+    /// Opening the popover or pressing Refresh should apply read receipts
+    /// immediately, even while the slower socket fallback poll is waiting.
+    func synchronizeDesktopReadState(at now: Date = Date()) {
+        let visible = unreviewedActivities(snapshot.activities, at: now)
+        guard visible != snapshot.activities else { return }
+        snapshot = CodexActivitySnapshot(
+            activities: visible,
+            isConnected: snapshot.isConnected,
+            lastUpdated: snapshot.lastUpdated
+        )
+    }
+
+    private func unreviewedActivities(_ activities: [CodexActivity], at now: Date) -> [CodexActivity] {
+        let desktopReadState = CodexDesktopReadState.load(from: desktopStateURL)
+        return activities.filter { activity in
+            guard desktopReadState?.hasReviewed(activity, at: now) == true else { return true }
+            // Desktop read state is authoritative on every poll. Do not turn
+            // it into a permanent ID dismissal: a later unread turn can reuse
+            // the same app-server thread ID between our polls.
+            retainedActivities.removeValue(forKey: activity.id)
+            return false
+        }
+    }
+
     private func monitorLoop() async {
         while !Task.isCancelled {
             do {
@@ -474,13 +522,9 @@ final class CodexActivityMonitor: ObservableObject {
                 let socketActivities = try await client.fetchActiveActivities()
                 let fileActivities = CodexSessionActivityScanner.scan(sessionsDirectory: sessionsDirectory)
                 let claudeActivities = ClaudeCodeActivityScanner.scan()
-                snapshot = CodexActivitySnapshot(
-                    activities: updateRetainedActivities(
-                        with: merge(socketActivities, fileActivities: fileActivities + claudeActivities),
-                        connectionIsHealthy: true
-                    ),
-                    isConnected: true,
-                    lastUpdated: Date()
+                updateSnapshot(
+                    with: merge(socketActivities, fileActivities: fileActivities + claudeActivities),
+                    connectionIsHealthy: true
                 )
                 await client.close()
                 try await Task.sleep(for: .seconds(5))
@@ -489,13 +533,9 @@ final class CodexActivityMonitor: ObservableObject {
             } catch {
                 let fallbackActivities = CodexSessionActivityScanner.scan(sessionsDirectory: sessionsDirectory)
                 let claudeActivities = ClaudeCodeActivityScanner.scan()
-                snapshot = CodexActivitySnapshot(
-                    activities: updateRetainedActivities(
-                        with: merge([], fileActivities: fallbackActivities + claudeActivities),
-                        connectionIsHealthy: false
-                    ),
-                    isConnected: false,
-                    lastUpdated: Date()
+                updateSnapshot(
+                    with: merge([], fileActivities: fallbackActivities + claudeActivities),
+                    connectionIsHealthy: false
                 )
                 try? await Task.sleep(for: .seconds(30))
             }
@@ -511,7 +551,8 @@ final class CodexActivityMonitor: ObservableObject {
 
     private func updateRetainedActivities(
         with incoming: [CodexActivity],
-        connectionIsHealthy: Bool
+        connectionIsHealthy: Bool,
+        at now: Date
     ) -> [CodexActivity] {
         // A newly active turn is a new confirmation cycle, even when the
         // app-server reuses the same thread ID.
@@ -539,7 +580,7 @@ final class CodexActivityMonitor: ObservableObject {
                     provider: previous.provider,
                     state: .completed,
                     startedAt: previous.startedAt,
-                    updatedAt: Date()
+                    updatedAt: now
                 )
             }
         } else {

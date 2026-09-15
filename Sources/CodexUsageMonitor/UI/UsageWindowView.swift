@@ -67,6 +67,7 @@ struct UsageWindowView: View {
                 HStack(spacing: 8) {
                     if settings.showRefreshButton {
                         Button(settingsStore.localized("action.refresh")) {
+                            activityMonitor.synchronizeDesktopReadState()
                             Task { await refreshService.refresh(reason: .manual) }
                         }
                         .disabled(refreshService.isRefreshing)
