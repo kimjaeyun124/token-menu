@@ -17,7 +17,7 @@ See your remaining allowance at a glance, open usage details from the menu bar, 
 - Remaining usage in the menu bar, with the 5-hour window and whole-number percentage display by default.
 - Weekly and optional monthly limits, plus configurable reset display: remaining countdown, local reset date/time, both, or hidden. Countdown units omit zero values and include days when applicable.
 - A compact usage panel with Refresh, Settings, and Quit.
-- Per-service visibility, ordering, refresh intervals, and low-allowance notifications.
+- Per-service visibility, ordering, refresh intervals, and configurable notifications for low allowance, completed Codex tasks, and usage-limit resets.
 - White provider icons by default, with configurable colors.
 - English and Korean interfaces, launch at login, and an optional Control–Option–C shortcut.
 - Settings that open on the current desktop, with a minimum window size and full-row sidebar buttons.
