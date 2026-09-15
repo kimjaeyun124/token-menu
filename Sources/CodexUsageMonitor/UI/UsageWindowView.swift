@@ -24,7 +24,12 @@ struct UsageWindowView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
-                    CodexActivityListView(activities: activityMonitor.snapshot.activities)
+                    CodexActivityListView(
+                        activities: CodexActivityOrdering.ordered(
+                            activityMonitor.snapshot.activities,
+                            by: settings.activeAIOrder
+                        )
+                    )
                 }
                 Divider()
             }

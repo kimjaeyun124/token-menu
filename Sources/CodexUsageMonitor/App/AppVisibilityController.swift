@@ -12,6 +12,7 @@ final class AppVisibilityController: ObservableObject {
 
     private weak var menuBarController: MenuBarController?
     private weak var refreshService: UsageRefreshService?
+    private weak var activityMonitor: CodexActivityMonitor?
     private var settingsWindowController: NSWindowController?
     private let shortcutManager = GlobalShortcutManager()
     private let logger = Logger(subsystem: "com.kimjaeyun.codexusagemonitor", category: "Lifecycle")
@@ -22,10 +23,12 @@ final class AppVisibilityController: ObservableObject {
 
     func configure(
         menuBarController: MenuBarController,
-        refreshService: UsageRefreshService
+        refreshService: UsageRefreshService,
+        activityMonitor: CodexActivityMonitor
     ) {
         self.menuBarController = menuBarController
         self.refreshService = refreshService
+        self.activityMonitor = activityMonitor
     }
 
     func applyStoredSettings() {
@@ -74,6 +77,7 @@ final class AppVisibilityController: ObservableObject {
             let rootView = SettingsView()
                 .environmentObject(refreshService ?? UsageRefreshService())
                 .environmentObject(SettingsStore.shared)
+                .environmentObject(activityMonitor ?? CodexActivityMonitor())
                 .environmentObject(self)
             let hostingController = NSHostingController(rootView: rootView)
             let window = NSWindow(

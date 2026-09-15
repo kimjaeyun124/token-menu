@@ -31,6 +31,7 @@ private enum SettingsCategory: String, CaseIterable, Identifiable {
 struct SettingsView: View {
     @EnvironmentObject private var refreshService: UsageRefreshService
     @EnvironmentObject private var settingsStore: SettingsStore
+    @EnvironmentObject private var activityMonitor: CodexActivityMonitor
     @EnvironmentObject private var visibility: AppVisibilityController
     @State private var category = SettingsCategory.general
     @State private var launchAtLogin = LoginItemService.isEnabled
@@ -246,6 +247,44 @@ struct SettingsView: View {
                 Toggle(l("usage.last_updated"), isOn: settingsStore.binding(\.showLastUpdatedTime))
                 Toggle(l("usage.status_labels"), isOn: settingsStore.binding(\.showStatusLabels))
                 Toggle(l("usage.active_ai"), isOn: settingsStore.binding(\.showActiveAI))
+            }
+            Section(l("section.active_ai_order")) {
+                if activeActivities.isEmpty {
+                    Text(l("active_ai.none"))
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(Array(activeActivities.enumerated()), id: \.element.id) { index, activity in
+                        HStack(spacing: 8) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(activity.title ?? activity.provider.displayName)
+                                    .lineLimit(1)
+                                Text(activity.provider.displayName)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer(minLength: 8)
+                            Button {
+                                moveActiveActivity(index, by: -1)
+                            } label: {
+                                Image(systemName: "chevron.up")
+                            }
+                            .buttonStyle(.borderless)
+                            .disabled(index == 0)
+                            .accessibilityLabel(l("action.move_up"))
+                            Button {
+                                moveActiveActivity(index, by: 1)
+                            } label: {
+                                Image(systemName: "chevron.down")
+                            }
+                            .buttonStyle(.borderless)
+                            .disabled(index == activeActivities.count - 1)
+                            .accessibilityLabel(l("action.move_down"))
+                        }
+                    }
+                }
+                Text(l("usage.active_ai_order_note"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Section(l("section.reset_time")) {
                 Picker(l("usage.reset_format"), selection: settingsStore.binding(\.resetTimeFormat)) {
@@ -531,6 +570,24 @@ struct SettingsView: View {
         let destination = index + offset
         guard settingsStore.settings.providerOrder.indices.contains(destination) else { return }
         settingsStore.settings.providerOrder.swapAt(index, destination)
+    }
+
+    private var activeActivities: [CodexActivity] {
+        CodexActivityOrdering.ordered(
+            activityMonitor.snapshot.activities,
+            by: settingsStore.settings.activeAIOrder
+        )
+    }
+
+    private func moveActiveActivity(_ index: Int, by offset: Int) {
+        var activities = activeActivities
+        let destination = index + offset
+        guard activities.indices.contains(index), activities.indices.contains(destination) else { return }
+        activities.swapAt(index, destination)
+
+        let visibleKeys = activities.map(\.orderingKey)
+        let hiddenKeys = settingsStore.settings.activeAIOrder.filter { !visibleKeys.contains($0) }
+        settingsStore.settings.activeAIOrder = visibleKeys + hiddenKeys
     }
 
     private func applyShortcut() {

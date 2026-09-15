@@ -32,6 +32,13 @@ struct CodexActivity: Equatable, Sendable, Identifiable {
     let startedAt: Date?
     let updatedAt: Date
 
+    /// Stable enough for user-selected ordering across repeated turns in the
+    /// same workspace. The raw turn id is used only when no title is known.
+    var orderingKey: String {
+        let workspace = title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return "\(provider.rawValue):\((workspace?.isEmpty == false ? workspace : nil) ?? id)"
+    }
+
     init(
         id: String,
         title: String?,
@@ -48,6 +55,22 @@ struct CodexActivity: Equatable, Sendable, Identifiable {
         self.state = state
         self.startedAt = startedAt
         self.updatedAt = updatedAt
+    }
+}
+
+enum CodexActivityOrdering {
+    static func ordered(_ activities: [CodexActivity], by savedKeys: [String]) -> [CodexActivity] {
+        guard !activities.isEmpty else { return [] }
+        var positions: [String: Int] = [:]
+        for (index, key) in savedKeys.enumerated() where positions[key] == nil {
+            positions[key] = index
+        }
+        return activities.sorted { lhs, rhs in
+            let lhsPosition = positions[lhs.orderingKey] ?? savedKeys.count
+            let rhsPosition = positions[rhs.orderingKey] ?? savedKeys.count
+            if lhsPosition != rhsPosition { return lhsPosition < rhsPosition }
+            return (lhs.startedAt ?? lhs.updatedAt) > (rhs.startedAt ?? rhs.updatedAt)
+        }
     }
 }
 

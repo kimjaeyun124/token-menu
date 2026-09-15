@@ -55,7 +55,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             activityMonitor: activityMonitor
         )
         self.menuBarController = menuBarController
-        visibility.configure(menuBarController: menuBarController, refreshService: refreshService)
+        visibility.configure(
+            menuBarController: menuBarController,
+            refreshService: refreshService,
+            activityMonitor: activityMonitor
+        )
         visibility.applyStoredSettings()
         activityNotificationCancellable = activityMonitor.$snapshot
             .sink { [weak self] snapshot in

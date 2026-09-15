@@ -208,6 +208,7 @@ struct AppSettings: Codable, Equatable, Sendable {
     var codex = ProviderPreferences()
     var claudeCode = ProviderPreferences()
     var providerOrder = AIProvider.allCases
+    var activeAIOrder: [String] = []
 
     var showRemainingPercentage = true
     var showResetTime = true
