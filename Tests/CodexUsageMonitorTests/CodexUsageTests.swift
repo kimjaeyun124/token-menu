@@ -221,6 +221,8 @@ final class CodexUsageTests: XCTestCase {
         XCTAssertTrue(settings.automaticRefresh)
         XCTAssertEqual(settings.globalRefreshInterval, .fiveMinutes)
         XCTAssertFalse(settings.notificationsEnabled)
+        XCTAssertTrue(settings.taskCompletionNotificationsEnabled)
+        XCTAssertFalse(settings.resetNotificationsEnabled)
         XCTAssertEqual(settings.popoverSize, .compact)
         XCTAssertEqual(settings.resetTimeFormat, .relative)
     }
@@ -233,12 +235,16 @@ final class CodexUsageTests: XCTestCase {
         store.settings.globalRefreshInterval = RefreshDuration(value: 2, unit: .minutes)
         store.settings.claudeCode.showInPopover = false
         store.settings.language = .korean
+        store.settings.taskCompletionNotificationsEnabled = false
+        store.settings.resetNotificationsEnabled = true
 
         let restored = SettingsStore(defaults: defaults)
         XCTAssertEqual(restored.settings.menuBarFormat, .dot)
         XCTAssertEqual(restored.settings.globalRefreshInterval, RefreshDuration(value: 2, unit: .minutes))
         XCTAssertFalse(restored.settings.claudeCode.showInPopover)
         XCTAssertEqual(restored.settings.language, .korean)
+        XCTAssertFalse(restored.settings.taskCompletionNotificationsEnabled)
+        XCTAssertTrue(restored.settings.resetNotificationsEnabled)
     }
 
     @MainActor
@@ -469,6 +475,8 @@ final class CodexUsageTests: XCTestCase {
             "category.display": "화면 표시",
             "category.advanced": "고급 설정",
             "category.diagnostics": "상태 및 진단",
+            "notifications.activity_completed": "Codex 작업 완료 알림",
+            "notifications.reset": "토큰 초기화 알림",
             "refresh.interval": "확인 주기",
             "action.refresh": "다시 확인",
             "services.show_popover": "사용량 창에 표시",
@@ -518,6 +526,8 @@ final class CodexUsageTests: XCTestCase {
         store.settings.language = .english
         XCTAssertEqual(store.localized("category.refresh"), "Usage Refresh")
         XCTAssertEqual(store.localized("display.icon_color"), "Icon Color")
+        XCTAssertEqual(store.localized("notifications.activity_completed"), "Codex Task Completion")
+        XCTAssertEqual(store.localized("notifications.reset"), "Usage Limit Reset")
         store.settings.language = .korean
         XCTAssertEqual(store.localized("category.refresh"), "사용량 확인")
         XCTAssertEqual(store.localized("option.icon_color_white"), "흰색")
@@ -576,6 +586,42 @@ final class CodexUsageTests: XCTestCase {
         store.settings.weeklyNotificationThreshold = 50
         XCTAssertTrue((1...100).contains(store.settings.fiveHourNotificationThreshold))
         XCTAssertTrue((1...100).contains(store.settings.weeklyNotificationThreshold))
+    }
+
+    func testUsageResetTransitionRequiresAnExpiredPreviousResetDate() {
+        let previousReset = Date(timeIntervalSince1970: 100)
+        let currentReset = Date(timeIntervalSince1970: 400)
+        let currentUpdate = Date(timeIntervalSince1970: 200)
+        let previous = AIUsage(
+            provider: .codex,
+            windows: [UsageWindow(type: .fiveHour, remainingPercent: 2, resetDate: previousReset)],
+            lastUpdated: Date(timeIntervalSince1970: 90),
+            source: "Test"
+        )
+        let current = AIUsage(
+            provider: .codex,
+            windows: [UsageWindow(type: .fiveHour, remainingPercent: 100, resetDate: currentReset)],
+            lastUpdated: currentUpdate,
+            source: "Test"
+        )
+
+        XCTAssertEqual(UsageResetTransition.resetWindows(previous: previous, current: current), [.fiveHour])
+
+        let unchanged = AIUsage(
+            provider: .codex,
+            windows: [UsageWindow(type: .fiveHour, remainingPercent: 1, resetDate: previousReset)],
+            lastUpdated: currentUpdate,
+            source: "Test"
+        )
+        XCTAssertTrue(UsageResetTransition.resetWindows(previous: previous, current: unchanged).isEmpty)
+
+        let notExpired = AIUsage(
+            provider: .codex,
+            windows: [UsageWindow(type: .fiveHour, remainingPercent: 100, resetDate: currentReset)],
+            lastUpdated: Date(timeIntervalSince1970: 50),
+            source: "Test"
+        )
+        XCTAssertTrue(UsageResetTransition.resetWindows(previous: previous, current: notExpired).isEmpty)
     }
 
     @MainActor
