@@ -223,6 +223,7 @@ final class CodexUsageTests: XCTestCase {
         XCTAssertFalse(settings.notificationsEnabled)
         XCTAssertTrue(settings.taskCompletionNotificationsEnabled)
         XCTAssertFalse(settings.resetNotificationsEnabled)
+        XCTAssertTrue(settings.showActiveAI)
         XCTAssertEqual(settings.popoverSize, .compact)
         XCTAssertEqual(settings.resetTimeFormat, .relative)
     }
@@ -237,6 +238,7 @@ final class CodexUsageTests: XCTestCase {
         store.settings.language = .korean
         store.settings.taskCompletionNotificationsEnabled = false
         store.settings.resetNotificationsEnabled = true
+        store.settings.showActiveAI = false
 
         let restored = SettingsStore(defaults: defaults)
         XCTAssertEqual(restored.settings.menuBarFormat, .dot)
@@ -245,6 +247,7 @@ final class CodexUsageTests: XCTestCase {
         XCTAssertEqual(restored.settings.language, .korean)
         XCTAssertFalse(restored.settings.taskCompletionNotificationsEnabled)
         XCTAssertTrue(restored.settings.resetNotificationsEnabled)
+        XCTAssertFalse(restored.settings.showActiveAI)
     }
 
     @MainActor
@@ -477,6 +480,7 @@ final class CodexUsageTests: XCTestCase {
             "category.diagnostics": "상태 및 진단",
             "notifications.activity_completed": "Codex 작업 완료 알림",
             "notifications.reset": "토큰 초기화 알림",
+            "usage.active_ai": "사용 중인 AI 표시",
             "refresh.interval": "확인 주기",
             "action.refresh": "다시 확인",
             "services.show_popover": "사용량 창에 표시",
@@ -528,6 +532,7 @@ final class CodexUsageTests: XCTestCase {
         XCTAssertEqual(store.localized("display.icon_color"), "Icon Color")
         XCTAssertEqual(store.localized("notifications.activity_completed"), "Codex Task Completion")
         XCTAssertEqual(store.localized("notifications.reset"), "Usage Limit Reset")
+        XCTAssertEqual(store.localized("usage.active_ai"), "Show Active AI Tasks")
         store.settings.language = .korean
         XCTAssertEqual(store.localized("category.refresh"), "사용량 확인")
         XCTAssertEqual(store.localized("option.icon_color_white"), "흰색")
