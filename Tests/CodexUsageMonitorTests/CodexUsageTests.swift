@@ -480,6 +480,7 @@ final class CodexUsageTests: XCTestCase {
             "category.diagnostics": "상태 및 진단",
             "notifications.activity_completed": "Codex 작업 완료 알림",
             "notifications.reset": "토큰 초기화 알림",
+            "notifications.enabled": "알림 사용",
             "usage.active_ai": "사용 중인 AI 표시",
             "refresh.interval": "확인 주기",
             "action.refresh": "다시 확인",
@@ -532,6 +533,7 @@ final class CodexUsageTests: XCTestCase {
         XCTAssertEqual(store.localized("display.icon_color"), "Icon Color")
         XCTAssertEqual(store.localized("notifications.activity_completed"), "Codex Task Completion")
         XCTAssertEqual(store.localized("notifications.reset"), "Usage Limit Reset")
+        XCTAssertEqual(store.localized("notifications.enabled"), "Notifications Enabled")
         XCTAssertEqual(store.localized("usage.active_ai"), "Show Active AI Tasks")
         store.settings.language = .korean
         XCTAssertEqual(store.localized("category.refresh"), "사용량 확인")
