@@ -22,6 +22,7 @@ See your remaining allowance at a glance, open usage details from the menu bar, 
 - English and Korean interfaces, launch at login, and an optional Control–Option–C shortcut.
 - Settings that open on the current desktop, with a minimum window size and full-row sidebar buttons.
 - Optional current Codex task status from the local app-server: working or waiting state with elapsed time.
+- Completed task rows remain until you open that task's specific Codex result from the row; merely bringing the Codex app forward does not mark tasks as reviewed.
 - The active-task section can be hidden independently; background monitoring stays available for completion notifications.
 - Reorder active AI tasks from Settings with per-project up/down controls; new tasks are appended after saved items.
 
