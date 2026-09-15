@@ -39,6 +39,15 @@ struct CodexActivity: Equatable, Sendable, Identifiable {
         return "\(provider.rawValue):\((workspace?.isEmpty == false ? workspace : nil) ?? id)"
     }
 
+    /// Returns the elapsed duration at the requested instant. Completed
+    /// activities use their recorded completion/update time as the endpoint
+    /// so their displayed duration stays fixed after completion.
+    func elapsedSeconds(at now: Date) -> TimeInterval? {
+        guard let startedAt else { return nil }
+        let end = state == .completed ? updatedAt : now
+        return max(0, end.timeIntervalSince(startedAt))
+    }
+
     init(
         id: String,
         title: String?,
@@ -473,8 +482,7 @@ final class CodexActivityMonitor: ObservableObject {
     }
 
     var primaryElapsedSeconds: TimeInterval? {
-        guard let startedAt = snapshot.primary?.startedAt else { return nil }
-        return max(0, Date().timeIntervalSince(startedAt))
+        snapshot.primary?.elapsedSeconds(at: Date())
     }
 
     private func monitorLoop() async {

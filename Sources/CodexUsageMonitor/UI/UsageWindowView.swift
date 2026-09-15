@@ -299,10 +299,10 @@ private struct CodexActivityView: View {
     }
 
     private func elapsedText(at now: Date) -> String {
-        guard let startedAt = activity.startedAt else {
+        guard let elapsedSeconds = activity.elapsedSeconds(at: now) else {
             return settingsStore.localized("activity.elapsed_unavailable")
         }
-        let seconds = max(0, Int(now.timeIntervalSince(startedAt)))
+        let seconds = max(0, Int(elapsedSeconds))
         let hours = seconds / 3_600
         let minutes = (seconds % 3_600) / 60
         let remainder = seconds % 60
