@@ -16,7 +16,7 @@ enum AIProvider: String, CaseIterable, Identifiable, Codable, Sendable {
     var menuBarName: String { self == .codex ? "Codex" : "Claude" }
 }
 
-enum UsageWindowType: String, Identifiable, Sendable {
+enum UsageWindowType: String, CaseIterable, Identifiable, Sendable {
     case fiveHour
     case weekly
     case monthly

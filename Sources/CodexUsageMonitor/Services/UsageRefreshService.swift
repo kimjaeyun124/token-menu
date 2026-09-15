@@ -17,6 +17,23 @@ struct ProviderDiagnostics: Equatable, Sendable {
     var status = "Not checked"
 }
 
+/// Identifies a genuine usage-window rollover instead of a normal percentage
+/// update. A reset notification is emitted only when the previous reset date
+/// has passed and the provider reports a later reset date for the same window.
+/// This keeps repeated refreshes quiet while still catching a reset that
+/// happened while the app was not running.
+enum UsageResetTransition {
+    static func resetWindows(previous: AIUsage, current: AIUsage) -> [UsageWindowType] {
+        guard previous.provider == current.provider else { return [] }
+
+        return UsageWindowType.allCases.filter { type in
+            guard let previousDate = previous.window(type)?.resetDate,
+                  let currentDate = current.window(type)?.resetDate else { return false }
+            return previousDate <= current.lastUpdated && currentDate > previousDate
+        }
+    }
+}
+
 @MainActor
 protocol RefreshScheduling: AnyObject {
     func schedule(every interval: TimeInterval, action: @escaping @MainActor () async -> Void)
@@ -328,6 +345,7 @@ final class UsageRefreshService: ObservableObject {
             previous: previous,
             current: current
         )
+
         notifyIfCrossed(
             provider: current.provider,
             type: .weekly,
@@ -335,6 +353,12 @@ final class UsageRefreshService: ObservableObject {
             previous: previous,
             current: current
         )
+
+        guard settings.resetNotificationsEnabled else { return }
+        for type in UsageResetTransition.resetWindows(previous: previous, current: current) {
+            guard let resetDate = current.window(type)?.resetDate else { continue }
+            notifyReset(provider: current.provider, type: type, resetDate: resetDate)
+        }
     }
 
     private func notifyIfCrossed(
@@ -369,5 +393,34 @@ final class UsageRefreshService: ObservableObject {
             trigger: nil
         )
         UNUserNotificationCenter.current().add(request)
+    }
+
+    private func notifyReset(provider: AIProvider, type: UsageWindowType, resetDate: Date) {
+        let locale = settingsStore.settings.language.locale
+        let content = UNMutableNotificationContent()
+        content.title = settingsStore.localized("notification.reset_title")
+        content.body = String(
+            format: settingsStore.localized("notification.reset_body"),
+            locale: locale,
+            provider.displayName,
+            localizedWindowName(type)
+        )
+        content.sound = .default
+        content.threadIdentifier = "usage-reset"
+        let resetIdentifier = Int(resetDate.timeIntervalSince1970)
+        let request = UNNotificationRequest(
+            identifier: "usage-reset-\(provider.rawValue)-\(type.rawValue)-\(resetIdentifier)",
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request)
+    }
+
+    private func localizedWindowName(_ type: UsageWindowType) -> String {
+        switch type {
+        case .fiveHour: return settingsStore.localized("limit.five_hour")
+        case .weekly: return settingsStore.localized("limit.weekly")
+        case .monthly: return settingsStore.localized("limit.monthly")
+        }
     }
 }

@@ -340,6 +340,18 @@ struct SettingsView: View {
                 Toggle(l("notifications.codex"), isOn: providerBinding(.codex, \.notificationsEnabled))
                 Toggle(l("notifications.claude"), isOn: providerBinding(.claudeCode, \.notificationsEnabled))
             }
+            Section(l("notifications.events")) {
+                Toggle(
+                    l("notifications.activity_completed"),
+                    isOn: settingsStore.binding(\.taskCompletionNotificationsEnabled)
+                )
+                Toggle(
+                    l("notifications.reset"),
+                    isOn: settingsStore.binding(\.resetNotificationsEnabled)
+                )
+                Text(l("notifications.events_note"))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section(l("notifications.thresholds")) {
                 Stepper(l("notifications.5h_below", settingsStore.settings.fiveHourNotificationThreshold), value: settingsStore.binding(\.fiveHourNotificationThreshold), in: 1...100)
                 Stepper(l("notifications.weekly_below", settingsStore.settings.weeklyNotificationThreshold), value: settingsStore.binding(\.weeklyNotificationThreshold), in: 1...100)

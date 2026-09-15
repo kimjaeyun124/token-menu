@@ -116,6 +116,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Set(snapshot.activities.map(\.id)).union(completedIDs)
         )
         guard settingsStore.settings.notificationsEnabled,
+              settingsStore.settings.taskCompletionNotificationsEnabled,
               settingsStore.settings.preferences(for: .codex).notificationsEnabled else {
             return
         }

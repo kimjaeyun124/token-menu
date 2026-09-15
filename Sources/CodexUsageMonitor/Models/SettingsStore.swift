@@ -229,6 +229,10 @@ struct AppSettings: Codable, Equatable, Sendable {
     var retryCount = 2
 
     var notificationsEnabled = false
+    // Keep task-completion alerts enabled by default so users who already
+    // enabled notifications retain the behavior introduced in v1.0.7.
+    var taskCompletionNotificationsEnabled = true
+    var resetNotificationsEnabled = false
     var fiveHourNotificationThreshold = 20
     var weeklyNotificationThreshold = 20
 
