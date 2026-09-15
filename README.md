@@ -23,6 +23,7 @@ See your remaining allowance at a glance, open usage details from the menu bar, 
 - Settings that open on the current desktop, with a minimum window size and full-row sidebar buttons.
 - Optional current Codex task status from the local app-server: working or waiting state with elapsed time.
 - The active-task section can be hidden independently; background monitoring stays available for completion notifications.
+- Reorder active AI tasks from Settings with per-project up/down controls; new tasks are appended after saved items.
 
 Token Menu shows service-provided usage limits, not estimated token counts. Missing data appears as unavailable, never as zero.
 
