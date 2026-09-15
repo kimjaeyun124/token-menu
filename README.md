@@ -22,6 +22,7 @@ See your remaining allowance at a glance, open usage details from the menu bar, 
 - English and Korean interfaces, launch at login, and an optional Control–Option–C shortcut.
 - Settings that open on the current desktop, with a minimum window size and full-row sidebar buttons.
 - Optional current Codex task status from the local app-server: working or waiting state with elapsed time.
+- The active-task section can be hidden independently; background monitoring stays available for completion notifications.
 
 Token Menu shows service-provided usage limits, not estimated token counts. Missing data appears as unavailable, never as zero.
 
