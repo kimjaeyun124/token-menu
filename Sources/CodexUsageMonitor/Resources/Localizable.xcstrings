@@ -127,6 +127,7 @@
     "unit.minutes" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Minutes"}},"ko":{"stringUnit":{"state":"translated","value":"분"}}}},
     "unit.seconds" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Seconds"}},"ko":{"stringUnit":{"state":"translated","value":"초"}}}},
     "usage.always_remaining" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Percentages always mean remaining usage and cannot be changed."}},"ko":{"stringUnit":{"state":"translated","value":"백분율은 항상 남은 사용량을 뜻합니다."}}}},
+    "usage.active_ai" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Show Active AI Tasks"}},"ko":{"stringUnit":{"state":"translated","value":"사용 중인 AI 표시"}}}},
     "usage.last_updated" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Last Updated"}},"ko":{"stringUnit":{"state":"translated","value":"마지막 확인"}}}},
     "usage.progress_bars" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Show Progress Bars"}},"ko":{"stringUnit":{"state":"translated","value":"사용량 막대 표시"}}}},
     "usage.remaining" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Show Remaining Percentage"}},"ko":{"stringUnit":{"state":"translated","value":"남은 사용량 표시"}}}},

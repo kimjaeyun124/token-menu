@@ -245,6 +245,7 @@ struct SettingsView: View {
                 Toggle(l("usage.progress_bars"), isOn: settingsStore.binding(\.showProgressBars))
                 Toggle(l("usage.last_updated"), isOn: settingsStore.binding(\.showLastUpdatedTime))
                 Toggle(l("usage.status_labels"), isOn: settingsStore.binding(\.showStatusLabels))
+                Toggle(l("usage.active_ai"), isOn: settingsStore.binding(\.showActiveAI))
             }
             Section(l("section.reset_time")) {
                 Picker(l("usage.reset_format"), selection: settingsStore.binding(\.resetTimeFormat)) {

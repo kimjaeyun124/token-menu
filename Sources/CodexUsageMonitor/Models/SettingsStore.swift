@@ -214,6 +214,7 @@ struct AppSettings: Codable, Equatable, Sendable {
     var showProgressBars = true
     var showLastUpdatedTime = true
     var showStatusLabels = false
+    var showActiveAI = true
     var resetTimeFormat = ResetTimeFormat.relative
 
     var automaticRefresh = true

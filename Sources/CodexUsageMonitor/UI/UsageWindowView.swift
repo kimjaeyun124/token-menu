@@ -12,20 +12,22 @@ struct UsageWindowView: View {
         let settings = settingsStore.settings
 
         VStack(alignment: .leading, spacing: settings.popoverSize == .compact ? 9 : 13) {
-            Text(settingsStore.localized("active_ai.title"))
-                .font(.system(size: 16, weight: .semibold))
+            if settings.showActiveAI {
+                Text(settingsStore.localized("active_ai.title"))
+                    .font(.system(size: 16, weight: .semibold))
 
-            if activityMonitor.snapshot.activities.isEmpty {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(settingsStore.localized("active_ai.none"))
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                if activityMonitor.snapshot.activities.isEmpty {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(settingsStore.localized("active_ai.none"))
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    CodexActivityListView(activities: activityMonitor.snapshot.activities)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            } else {
-                CodexActivityListView(activities: activityMonitor.snapshot.activities)
+                Divider()
             }
-            Divider()
 
             Text(settingsStore.localized("app.title"))
                 .font(.system(size: 16, weight: .semibold))
