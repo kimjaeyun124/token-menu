@@ -124,6 +124,43 @@ final class CodexUsageTests: XCTestCase {
         )
     }
 
+    func testActiveAIOrderingUsesSavedKeysAndKeepsNewTasksLast() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let newer = CodexActivity(
+            id: "thread-new",
+            title: "New Project",
+            state: .working,
+            startedAt: now.addingTimeInterval(60),
+            updatedAt: now.addingTimeInterval(60)
+        )
+        let saved = CodexActivity(
+            id: "thread-saved",
+            title: "Saved Project",
+            state: .working,
+            startedAt: now,
+            updatedAt: now
+        )
+        let unknown = CodexActivity(
+            id: "thread-unknown",
+            title: "Unknown Project",
+            state: .working,
+            startedAt: now.addingTimeInterval(120),
+            updatedAt: now.addingTimeInterval(120)
+        )
+
+        let ordered = CodexActivityOrdering.ordered(
+            [newer, saved, unknown],
+            by: [newer.orderingKey, saved.orderingKey]
+        )
+        XCTAssertEqual(ordered.map(\.title), ["New Project", "Saved Project", "Unknown Project"])
+
+        let duplicateKeys = CodexActivityOrdering.ordered(
+            [unknown, saved],
+            by: [saved.orderingKey, saved.orderingKey]
+        )
+        XCTAssertEqual(duplicateKeys.map(\.title), ["Saved Project", "Unknown Project"])
+    }
+
     func testClaudeActivityScannerFindsClaudeProcessesOnly() {
         let activities = ClaudeCodeActivityScanner.scan(
             now: Date(timeIntervalSince1970: 1_700_000_000),
@@ -218,6 +255,7 @@ final class CodexUsageTests: XCTestCase {
         XCTAssertEqual(settings.providerIdentification, .icon)
         XCTAssertEqual(settings.providerIconColor, .white)
         XCTAssertEqual(settings.schemaVersion, 5)
+        XCTAssertTrue(settings.activeAIOrder.isEmpty)
         XCTAssertTrue(settings.automaticRefresh)
         XCTAssertEqual(settings.globalRefreshInterval, .fiveMinutes)
         XCTAssertFalse(settings.notificationsEnabled)
@@ -236,6 +274,7 @@ final class CodexUsageTests: XCTestCase {
         store.settings.globalRefreshInterval = RefreshDuration(value: 2, unit: .minutes)
         store.settings.claudeCode.showInPopover = false
         store.settings.language = .korean
+        store.settings.activeAIOrder = ["codex:Token Menu", "claudeCode:Claude Code"]
         store.settings.taskCompletionNotificationsEnabled = false
         store.settings.resetNotificationsEnabled = true
         store.settings.showActiveAI = false
@@ -245,6 +284,7 @@ final class CodexUsageTests: XCTestCase {
         XCTAssertEqual(restored.settings.globalRefreshInterval, RefreshDuration(value: 2, unit: .minutes))
         XCTAssertFalse(restored.settings.claudeCode.showInPopover)
         XCTAssertEqual(restored.settings.language, .korean)
+        XCTAssertEqual(restored.settings.activeAIOrder, ["codex:Token Menu", "claudeCode:Claude Code"])
         XCTAssertFalse(restored.settings.taskCompletionNotificationsEnabled)
         XCTAssertTrue(restored.settings.resetNotificationsEnabled)
         XCTAssertFalse(restored.settings.showActiveAI)
@@ -482,6 +522,7 @@ final class CodexUsageTests: XCTestCase {
             "notifications.reset": "토큰 초기화 알림",
             "notifications.enabled": "알림 사용",
             "usage.active_ai": "사용 중인 AI 표시",
+            "section.active_ai_order": "사용 중인 AI 순서",
             "refresh.interval": "확인 주기",
             "action.refresh": "다시 확인",
             "services.show_popover": "사용량 창에 표시",
@@ -535,6 +576,8 @@ final class CodexUsageTests: XCTestCase {
         XCTAssertEqual(store.localized("notifications.reset"), "Usage Limit Reset")
         XCTAssertEqual(store.localized("notifications.enabled"), "Notifications Enabled")
         XCTAssertEqual(store.localized("usage.active_ai"), "Show Active AI Tasks")
+        XCTAssertEqual(store.localized("section.active_ai_order"), "Active AI Task Order")
+        XCTAssertEqual(store.localized("action.move_up"), "Move Up")
         store.settings.language = .korean
         XCTAssertEqual(store.localized("category.refresh"), "사용량 확인")
         XCTAssertEqual(store.localized("option.icon_color_white"), "흰색")
