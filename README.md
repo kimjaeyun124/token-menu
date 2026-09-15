@@ -22,7 +22,7 @@ See your remaining allowance at a glance, open usage details from the menu bar, 
 - English and Korean interfaces, launch at login, and an optional Control–Option–C shortcut.
 - Settings that open on the current desktop, with a minimum window size and full-row sidebar buttons.
 - Optional current Codex task status from the local app-server: working or waiting state with elapsed time.
-- Completed task rows remain until you open that task's specific Codex result from the row; merely bringing the Codex app forward does not mark tasks as reviewed.
+- Completed tasks sync with Codex Desktop's per-task read state, including results opened directly in Codex. Opening the menu bar panel or pressing Refresh applies the latest read state; bringing Codex forward alone does not dismiss other unread tasks.
 - The active-task section can be hidden independently; background monitoring stays available for completion notifications.
 - Reorder active AI tasks from Settings with per-project up/down controls; new tasks are appended after saved items.
 
@@ -34,6 +34,8 @@ When the Codex app-server daemon is available, the usage popover also shows ever
 Token Menu prefers the Codex executable bundled with the official ChatGPT/Codex app. Quarantined or AppTranslocation executables are skipped so macOS XProtect is not asked to launch them; if every detected executable is blocked, install or update Codex from the official app and refresh.
 
 When the desktop Codex client uses a separate stdio server, Token Menu also checks local session lifecycle markers to detect active turns. Multiple active turns are listed separately with their workspace names. Prompt and tool contents are never read.
+
+Read-state synchronization uses local desktop metadata without modifying Codex files. It applies only to known desktop tasks after a short completion-write grace period. If the metadata is missing, unsupported, or ambiguous across accounts or hosts, completed rows stay available; a task row can still open its specific result.
 
 ## Service support
 
