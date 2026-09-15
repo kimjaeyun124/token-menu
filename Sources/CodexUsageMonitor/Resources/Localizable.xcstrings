@@ -182,7 +182,7 @@
     "notifications.5h_below" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"5H Remaining Below: %d%%"}},"ko":{"stringUnit":{"state":"translated","value":"5H 남은 사용량이 %d%% 아래일 때"}}}},
     "notifications.claude" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Claude Code Notifications"}},"ko":{"stringUnit":{"state":"translated","value":"Claude Code 알림"}}}},
     "notifications.codex" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Codex Notifications"}},"ko":{"stringUnit":{"state":"translated","value":"Codex 알림"}}}},
-    "notifications.enabled" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Low Usage Notifications"}},"ko":{"stringUnit":{"state":"translated","value":"사용량 부족 알림"}}}},
+    "notifications.enabled" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Notifications Enabled"}},"ko":{"stringUnit":{"state":"translated","value":"알림 사용"}}}},
     "notifications.events" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Event Notifications"}},"ko":{"stringUnit":{"state":"translated","value":"상태 변경 알림"}}}},
     "notifications.activity_completed" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Codex Task Completion"}},"ko":{"stringUnit":{"state":"translated","value":"Codex 작업 완료 알림"}}}},
     "notifications.reset" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Usage Limit Reset"}},"ko":{"stringUnit":{"state":"translated","value":"토큰 초기화 알림"}}}},
