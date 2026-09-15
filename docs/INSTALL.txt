@@ -26,6 +26,7 @@ English
 Builds without Developer ID signing and Apple notarization may trigger a macOS warning.
 After checking the source, use 'Open Anyway' in System Settings > Privacy & Security.
 Do not launch the app directly from the DMG or Downloads folder. A quarantined direct launch can use macOS AppTranslocation and block the Codex app-server connection.
+Token Menu prefers the executable bundled with the official ChatGPT/Codex app and skips quarantined or AppTranslocation Codex executables. If macOS has blocked every detected executable, install or update Codex from the official app, then press Refresh.
 Do not run the old Codex Usage app and Token Menu together. Existing preferences are retained.
 Sign in through your installed Codex CLI/app first to retrieve Codex usage.
 When the Codex response includes a monthly usage window, select Monthly in the usage panel or menu bar limit settings. Token Menu never invents a monthly value that the response does not provide.

@@ -167,6 +167,9 @@ struct UsageWindowView: View {
         if provider == .codex, AppLocationDiagnostics.isAppTranslocated {
             return settingsStore.localized("error.codex_translocated")
         }
+        if provider == .codex, error.contains("macOS blocked") || error.contains("quarantined") {
+            return settingsStore.localized("error.codex_security_blocked")
+        }
         if provider == .claudeCode { return settingsStore.localized("error.claude_background") }
         if error.contains("Sign in") { return settingsStore.localized("error.codex_sign_in") }
         return settingsStore.localized("status.usage_unavailable")

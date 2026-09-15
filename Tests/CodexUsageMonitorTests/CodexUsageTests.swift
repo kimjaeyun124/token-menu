@@ -150,6 +150,33 @@ final class CodexUsageTests: XCTestCase {
         XCTAssertEqual(usage.weeklyRemainingPercent, 11)
     }
 
+    func testCodexDetectorSkipsQuarantinedExecutable() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("token-menu-codex-detector-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let blocked = directory.appendingPathComponent("codex-blocked")
+        let safe = directory.appendingPathComponent("codex-safe")
+        let script = Data("#!/bin/sh\nprintf 'codex-cli test\\n'\n".utf8)
+        try script.write(to: blocked)
+        try script.write(to: safe)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: blocked.path)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: safe.path)
+        _ = try ProcessRunner.run(
+            executableURL: URL(fileURLWithPath: "/usr/bin/xattr"),
+            arguments: ["-w", "com.apple.quarantine", "0081;00000000;TokenMenu;https://example.invalid", blocked.path]
+        )
+
+        let detected = try CodexDetector(candidates: [blocked, safe]).detect()
+        XCTAssertEqual(detected.executableURL, safe)
+
+        XCTAssertThrowsError(try CodexDetector(candidates: [blocked]).detect()) { error in
+            XCTAssertTrue(error is CodexDetectionError)
+            XCTAssertEqual((error as? CodexDetectionError)?.errorDescription, CodexDetectionError.blockedByMacOS.errorDescription)
+        }
+    }
+
     func testMissingAndInvalidValuesNeverBecomeZero() throws {
         let missing = try CodexRateLimitParser.parse(
             responseData: Data(#"{"id":2,"result":{"rateLimits":{}}}"#.utf8)

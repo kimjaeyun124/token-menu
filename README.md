@@ -28,6 +28,7 @@ Token Menu shows service-provided usage limits, not estimated token counts. Miss
 If Codex exposes a monthly allowance for the signed-in plan, Token Menu displays that service-provided window too. It never fabricates a monthly value when the current Codex response does not include one.
 
 When the Codex app-server daemon is available, the usage popover also shows every currently active task, its waiting state, and elapsed time. This connection is read-only and does not send prompts or modify Codex tasks.
+Token Menu prefers the Codex executable bundled with the official ChatGPT/Codex app. Quarantined or AppTranslocation executables are skipped so macOS XProtect is not asked to launch them; if every detected executable is blocked, install or update Codex from the official app and refresh.
 
 When the desktop Codex client uses a separate stdio server, Token Menu also checks local session lifecycle markers to detect active turns. Multiple active turns are listed separately with their workspace names. Prompt and tool contents are never read.
 
