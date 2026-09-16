@@ -57,6 +57,34 @@ final class CodexDesktopReadStateTests: XCTestCase {
     }
 
     @MainActor
+    func testClaudeProcessDisappearanceIsNotInferredAsCompletion() {
+        let monitor = CodexActivityMonitor(
+            desktopStateURL: FileManager.default.temporaryDirectory
+                .appendingPathComponent("token-menu-missing-claude-state-\(UUID().uuidString).json")
+        )
+        let running = activity(state: .working, provider: .claudeCode, updatedAt: now)
+
+        monitor.updateSnapshot(with: [running], connectionIsHealthy: true, at: now)
+        monitor.updateSnapshot(with: [], connectionIsHealthy: true, at: now.addingTimeInterval(5))
+
+        XCTAssertTrue(monitor.snapshot.activities.isEmpty)
+    }
+
+    @MainActor
+    func testCodexProcessDisappearanceStillInfersCompletion() {
+        let monitor = CodexActivityMonitor(
+            desktopStateURL: FileManager.default.temporaryDirectory
+                .appendingPathComponent("token-menu-missing-codex-state-\(UUID().uuidString).json")
+        )
+        let running = activity(state: .working, provider: .codex, updatedAt: now)
+
+        monitor.updateSnapshot(with: [running], connectionIsHealthy: true, at: now)
+        monitor.updateSnapshot(with: [], connectionIsHealthy: true, at: now.addingTimeInterval(5))
+
+        XCTAssertEqual(monitor.snapshot.activities.first?.state, .completed)
+    }
+
+    @MainActor
     func testOpeningSpecificResultRemovesOnlyItsCompletionAndRetainedAliases() throws {
         let directory = try fixtureDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
