@@ -672,6 +672,16 @@ enum CodexActivitySocketDiscovery {
         )
     }
 
+    static func additionalSocketPaths(
+        discovered: [String],
+        configured: [String]
+    ) -> [String] {
+        let configuredPaths = Set(configured.map { URL(fileURLWithPath: $0).standardizedFileURL.path })
+        return unique(discovered.filter {
+            !configuredPaths.contains(URL(fileURLWithPath: $0).standardizedFileURL.path)
+        })
+    }
+
     private static func appServerPIDs(in processOutput: String) -> [Int32] {
         processOutput.split(whereSeparator: \.isNewline).compactMap { line in
             let parts = line.split(maxSplits: 1, whereSeparator: { $0 == " " || $0 == "\t" })
@@ -861,15 +871,21 @@ final class CodexActivityMonitor: ObservableObject {
     }
 
     private func fetchSocketActivities() async throws -> [CodexActivity] {
+        var initialActivities: [CodexActivity]?
         var lastError: Error?
         do {
-            return try await fetchSocketActivities(from: Self.uniquePaths(socketPaths + discoveredSocketPaths))
+            initialActivities = try await fetchSocketActivities(
+                from: Self.uniquePaths(socketPaths + discoveredSocketPaths)
+            )
         } catch {
             lastError = error
         }
 
         let now = Date()
-        guard lastSocketDiscovery == nil || now.timeIntervalSince(lastSocketDiscovery!) >= 30 else {
+        let shouldDiscover = lastSocketDiscovery == nil
+            || now.timeIntervalSince(lastSocketDiscovery!) >= 30
+        guard shouldDiscover else {
+            if let initialActivities { return initialActivities }
             throw lastError ?? CodexActivityError.connectionClosed
         }
 
@@ -879,8 +895,27 @@ final class CodexActivityMonitor: ObservableObject {
         discoveredSocketPaths = Self.uniquePaths(discovered.socketPaths)
         discoveredSessionsDirectories = Self.uniqueURLs(discovered.sessionsDirectories)
         lastSocketDiscovery = now
+
+        let additionalSocketPaths = CodexActivitySocketDiscovery.additionalSocketPaths(
+            discovered: discoveredSocketPaths,
+            configured: socketPaths
+        )
+        if let initialActivities {
+            guard !additionalSocketPaths.isEmpty else { return initialActivities }
+            do {
+                let additionalActivities = try await fetchSocketActivities(from: additionalSocketPaths)
+                return merge(initialActivities, fileActivities: additionalActivities)
+            } catch {
+                // Keep a successful primary server result when an optional
+                // secondary runtime disappears during discovery.
+                return initialActivities
+            }
+        }
+
         do {
-            return try await fetchSocketActivities(from: Self.uniquePaths(socketPaths + discoveredSocketPaths))
+            return try await fetchSocketActivities(
+                from: Self.uniquePaths(discoveredSocketPaths + socketPaths)
+            )
         } catch {
             throw error
         }
