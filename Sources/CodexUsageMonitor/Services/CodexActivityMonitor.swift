@@ -95,6 +95,68 @@ struct CodexActivitySnapshot: Equatable, Sendable {
     var primary: CodexActivity? { activities.first }
 }
 
+/// Resolves Codex's local runtime locations without assuming that every Mac
+/// uses the default home directory. `CODEX_HOME` moves the sessions and the
+/// app-server control socket together, while the default home remains a
+/// fallback for desktop launches that do not inherit the shell environment.
+struct CodexActivityEnvironment: Equatable, Sendable {
+    let codexHomeDirectories: [URL]
+    let sessionsDirectories: [URL]
+    let socketPaths: [String]
+
+    static func current(
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> CodexActivityEnvironment {
+        let home = homeDirectory.standardizedFileURL
+        var codexHomes: [URL] = []
+        if let configuredHome = environment["CODEX_HOME"],
+           let resolvedHome = resolveConfiguredPath(configuredHome, relativeTo: home) {
+            codexHomes.append(resolvedHome)
+        }
+        codexHomes.append(home.appendingPathComponent(".codex", isDirectory: true))
+
+        let uniqueHomes = uniqueURLs(codexHomes)
+        return CodexActivityEnvironment(
+            codexHomeDirectories: uniqueHomes,
+            sessionsDirectories: uniqueHomes.map {
+                $0.appendingPathComponent("sessions", isDirectory: true)
+            },
+            socketPaths: uniqueHomes.flatMap { codexHome in
+                [
+                    codexHome
+                        .appendingPathComponent("app-server-control", isDirectory: true)
+                        .appendingPathComponent("app-server-control.sock")
+                        .path,
+                    codexHome.appendingPathComponent("app-server-control.sock").path
+                ]
+            }
+        )
+    }
+
+    private static func resolveConfiguredPath(_ path: String, relativeTo home: URL) -> URL? {
+        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if trimmed == "~" {
+            return home
+        }
+        if trimmed.hasPrefix("~/") {
+            return home.appendingPathComponent(String(trimmed.dropFirst(2)), isDirectory: true)
+        }
+        if trimmed.hasPrefix("/") {
+            return URL(fileURLWithPath: trimmed, isDirectory: true).standardizedFileURL
+        }
+        return home.appendingPathComponent(trimmed, isDirectory: true).standardizedFileURL
+    }
+
+    private static func uniqueURLs(_ urls: [URL]) -> [URL] {
+        var seen = Set<String>()
+        return urls.map(\.standardizedFileURL).filter {
+            seen.insert($0.path).inserted
+        }
+    }
+}
+
 enum CodexActivityParser {
     private struct Envelope: Decodable {
         let result: ResultPayload?
@@ -102,7 +164,12 @@ enum CodexActivityParser {
 
     private struct ResultPayload: Decodable {
         let data: [ThreadRecord]?
+        let threads: [ThreadRecord]?
         let thread: ThreadRecord?
+
+        var threadRecords: [ThreadRecord] {
+            data ?? threads ?? []
+        }
     }
 
     private struct ThreadRecord: Decodable {
@@ -110,13 +177,13 @@ enum CodexActivityParser {
         let name: String?
         let preview: String?
         let createdAt: Int64?
-        let updatedAt: Int64
-        let status: ThreadStatus
+        let updatedAt: Int64?
+        let status: ThreadStatus?
         let turns: [TurnRecord]?
     }
 
     private struct ThreadStatus: Decodable {
-        let type: String
+        let type: String?
         let activeFlags: [String]?
     }
 
@@ -127,14 +194,14 @@ enum CodexActivityParser {
 
     static func activeThreadIDs(in responseData: Data) throws -> [String] {
         let envelope = try JSONDecoder().decode(Envelope.self, from: responseData)
-        return (envelope.result?.data ?? []).compactMap { thread in
+        return (envelope.result?.threadRecords ?? []).compactMap { thread in
             isActive(thread.status) ? thread.id : nil
         }
     }
 
     static func parseThreadList(responseData: Data, now: Date = Date()) throws -> [CodexActivity] {
         let envelope = try JSONDecoder().decode(Envelope.self, from: responseData)
-        return (envelope.result?.data ?? []).compactMap { thread in
+        return (envelope.result?.threadRecords ?? []).compactMap { thread in
             guard let state = activityState(for: thread.status) else { return nil }
             return CodexActivity(
                 id: thread.id,
@@ -142,7 +209,9 @@ enum CodexActivityParser {
                 chatGPTThreadID: thread.id,
                 state: state,
                 startedAt: latestStartedAt(thread.turns),
-                updatedAt: Date(timeIntervalSince1970: TimeInterval(thread.updatedAt))
+                updatedAt: thread.updatedAt.map {
+                    Date(timeIntervalSince1970: TimeInterval($0))
+                } ?? now
             )
         }
         .sorted { ($0.startedAt ?? $0.updatedAt) > ($1.startedAt ?? $1.updatedAt) }
@@ -157,17 +226,19 @@ enum CodexActivityParser {
             chatGPTThreadID: thread.id,
             state: activityState(for: thread.status) ?? activity.state,
             startedAt: latestStartedAt(thread.turns) ?? activity.startedAt,
-            updatedAt: Date(timeIntervalSince1970: TimeInterval(thread.updatedAt))
+            updatedAt: thread.updatedAt.map {
+                Date(timeIntervalSince1970: TimeInterval($0))
+            } ?? activity.updatedAt
         )
     }
 
-    private static func isActive(_ status: ThreadStatus) -> Bool {
-        status.type == "active"
+    private static func isActive(_ status: ThreadStatus?) -> Bool {
+        status?.type == "active"
     }
 
-    private static func activityState(for status: ThreadStatus) -> CodexActivityState? {
+    private static func activityState(for status: ThreadStatus?) -> CodexActivityState? {
         guard isActive(status) else { return nil }
-        let flags = Set(status.activeFlags ?? [])
+        let flags = Set(status?.activeFlags ?? [])
         if flags.contains("waitingOnApproval") { return .waitingForApproval }
         if flags.contains("waitingOnUserInput") { return .waitingForInput }
         return .working
@@ -210,7 +281,7 @@ enum CodexSessionActivityScanner {
     ) -> [CodexActivity] {
         var cache = CodexSessionActivityScanCache()
         return scan(
-            sessionsDirectory: sessionsDirectory,
+            sessionsDirectories: [sessionsDirectory],
             now: now,
             freshness: freshness,
             cache: &cache
@@ -223,20 +294,40 @@ enum CodexSessionActivityScanner {
         freshness: TimeInterval = 15 * 60,
         cache: inout CodexSessionActivityScanCache
     ) -> [CodexActivity] {
-        let fileManager = FileManager.default
-        guard let enumerator = fileManager.enumerator(
-            at: sessionsDirectory,
-            includingPropertiesForKeys: [.contentModificationDateKey],
-            options: [.skipsHiddenFiles]
-        ) else { return [] }
+        scan(
+            sessionsDirectories: [sessionsDirectory],
+            now: now,
+            freshness: freshness,
+            cache: &cache
+        )
+    }
 
-        let candidates = enumerator.compactMap { item -> (URL, Date)? in
-            guard let url = item as? URL, url.pathExtension == "jsonl" else { return nil }
-            guard let resourceValues = try? url.resourceValues(forKeys: [.contentModificationDateKey]),
-                  let modifiedAt = resourceValues.contentModificationDate,
-                  now.timeIntervalSince(modifiedAt) <= freshness else { return nil }
-            return (url, modifiedAt)
+    static func scan(
+        sessionsDirectories: [URL],
+        now: Date = Date(),
+        freshness: TimeInterval = 15 * 60,
+        cache: inout CodexSessionActivityScanCache
+    ) -> [CodexActivity] {
+        let fileManager = FileManager.default
+        var candidates: [(URL, Date)] = []
+        var seenPaths = Set<String>()
+        for sessionsDirectory in sessionsDirectories {
+            guard let enumerator = fileManager.enumerator(
+                at: sessionsDirectory,
+                includingPropertiesForKeys: [.contentModificationDateKey],
+                options: [.skipsHiddenFiles]
+            ) else { continue }
+
+            for item in enumerator {
+                guard let url = item as? URL, url.pathExtension == "jsonl" else { continue }
+                guard let resourceValues = try? url.resourceValues(forKeys: [.contentModificationDateKey]),
+                      let modifiedAt = resourceValues.contentModificationDate,
+                      now.timeIntervalSince(modifiedAt) <= freshness,
+                      seenPaths.insert(url.path).inserted else { continue }
+                candidates.append((url, modifiedAt))
+            }
         }
+        guard !candidates.isEmpty else { return [] }
 
         // Most rollout files are historical and can be very large. Only the
         // most recently modified candidates can contain a live turn, keeping
@@ -271,23 +362,28 @@ enum CodexSessionActivityScanner {
         var completedTurnID: String?
         var completedStartedAt: Date?
 
-        let startedMarker = Data(#""type":"task_started""#.utf8)
-        let completedMarker = Data(#""type":"task_complete""#.utf8)
-        let sessionMarker = Data(#""type":"session_meta""#.utf8)
+        let lifecycleTypes = [
+            "task_started",
+            "task_complete",
+            "task_completed",
+            "turn_started",
+            "turn_complete",
+            "turn_completed",
+            "session_meta"
+        ]
         var sessionTitle: String?
         for line in data.split(separator: 0x0A) {
             // Avoid JSON decoding prompt, tool, and token events. Lifecycle
             // markers are the only records needed for activity detection.
-            guard line.range(of: startedMarker) != nil
-                || line.range(of: completedMarker) != nil
-                || line.range(of: sessionMarker) != nil else {
+            guard lifecycleTypes.contains(where: { line.range(of: Data($0.utf8)) != nil }) else {
                 continue
             }
-            guard
-                let object = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any],
-                let payload = object["payload"] as? [String: Any]
-            else { continue }
-            let type = (payload["type"] as? String) ?? (object["type"] as? String)
+            guard let object = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any] else {
+                continue
+            }
+            let payload = object["payload"] as? [String: Any] ?? object
+            let type = payload["type"] as? String
+                ?? (object["type"] as? String)
             guard let type else { continue }
 
             switch type {
@@ -297,17 +393,17 @@ enum CodexSessionActivityScanner {
                 if let cwd = payload["cwd"] as? String {
                     sessionTitle = workspaceName(from: cwd)
                 }
-            case "task_started":
-                activeTurnID = payload["turn_id"] as? String
+            case "task_started", "turn_started":
+                activeTurnID = (payload["turn_id"] as? String)
+                    ?? (payload["id"] as? String)
                 completedTurnID = nil
                 completedStartedAt = nil
-                if let seconds = payload["started_at"] as? NSNumber {
-                    startedAt = Date(timeIntervalSince1970: seconds.doubleValue)
-                } else {
-                    startedAt = now
-                }
-            case "task_complete":
-                if activeTurnID == (payload["turn_id"] as? String) {
+                startedAt = dateValue(payload["started_at"]) ?? now
+            case "task_complete", "task_completed", "turn_complete", "turn_completed":
+                let completedID = payload["turn_id"] as? String
+                    ?? (payload["id"] as? String)
+                if activeTurnID != nil,
+                   completedID == nil || activeTurnID == completedID {
                     completedTurnID = activeTurnID
                     completedStartedAt = startedAt
                     activeTurnID = nil
@@ -337,6 +433,16 @@ enum CodexSessionActivityScanner {
             startedAt: completedStartedAt,
             updatedAt: updatedAt
         )
+    }
+
+    private static func dateValue(_ value: Any?) -> Date? {
+        if let number = value as? NSNumber {
+            return Date(timeIntervalSince1970: number.doubleValue)
+        }
+        if let string = value as? String, let seconds = Double(string) {
+            return Date(timeIntervalSince1970: seconds)
+        }
+        return nil
     }
 
     private static func workspaceName(from path: String) -> String? {
@@ -464,9 +570,87 @@ enum ClaudeCodeActivityScanner {
     }
 
     private static func isClaudeCommand(_ command: String) -> Bool {
-        let executable = command.split(whereSeparator: { $0 == " " || $0 == "\t" }).first.map(String.init) ?? ""
-        let name = URL(fileURLWithPath: executable).lastPathComponent.lowercased()
-        return name == "claude" || name == "claude-code"
+        let tokens = command
+            .split(whereSeparator: { $0 == " " || $0 == "\t" })
+            .map { String($0).trimmingCharacters(in: CharacterSet(charactersIn: "'\"")) }
+        guard let executable = tokens.first else { return false }
+        let executableName = URL(fileURLWithPath: executable).lastPathComponent.lowercased()
+        if executableName == "claude" || executableName == "claude-code" {
+            return true
+        }
+
+        // npm, pnpm, Bun, and npx can leave Node/Bun as argv[0] while the
+        // actual Claude Code entry point appears later in the command line.
+        // Require a path component here so `zsh -lc claude` is not treated as
+        // a running session merely because the shell command contains a name.
+        return tokens.dropFirst().contains { token in
+            guard token.contains("/") else { return false }
+            let components = URL(fileURLWithPath: token).pathComponents.map { $0.lowercased() }
+            return components.contains("claude") || components.contains("claude-code")
+        }
+    }
+}
+
+/// Finds non-default Unix sockets owned by a running Codex app-server. The
+/// default path is still tried first; this probe covers custom `--listen`
+/// paths and desktop/CLI installations that use different runtime layouts.
+enum CodexActivitySocketDiscovery {
+    static func discover() -> [String] {
+        guard let ps = try? ProcessRunner.run(
+            executableURL: URL(fileURLWithPath: "/bin/ps"),
+            arguments: ["-axo", "pid=,command="]
+        ) else { return [] }
+
+        let pids = appServerPIDs(in: ps.standardOutput)
+        let lsofURL = ["/usr/sbin/lsof", "/usr/bin/lsof"]
+            .map(URL.init(fileURLWithPath:))
+            .first(where: { FileManager.default.isExecutableFile(atPath: $0.path) })
+        guard let lsofURL else { return [] }
+
+        return unique(pids.flatMap { pid -> [String] in
+            guard let output = try? ProcessRunner.run(
+                executableURL: lsofURL,
+                arguments: ["-Fn", "-a", "-p", String(pid), "-U"]
+            ) else { return [] }
+            return socketPaths(in: output.standardOutput)
+        })
+    }
+
+    static func socketPaths(in lsofOutput: String) -> [String] {
+        unique(lsofOutput.split(whereSeparator: { $0 == "\n" }).compactMap { line in
+            let value = String(line)
+            guard value.hasPrefix("n"), value.count > 1 else { return nil }
+            let path = String(value.dropFirst())
+            guard path.hasPrefix("/"),
+                  !path.hasPrefix("->") else {
+                return nil
+            }
+            return path
+        })
+    }
+
+    private static func appServerPIDs(in processOutput: String) -> [Int32] {
+        processOutput.split(whereSeparator: \.isNewline).compactMap { line in
+            let parts = line.split(maxSplits: 1, whereSeparator: { $0 == " " || $0 == "\t" })
+            guard parts.count == 2,
+                  let pid = Int32(parts[0]) else { return nil }
+            let tokens = parts[1].split(whereSeparator: { $0 == " " || $0 == "\t" })
+            guard let executable = tokens.first else { return nil }
+            let name = URL(fileURLWithPath: String(executable)).lastPathComponent.lowercased()
+            guard name == "codex" || name == "codex-cli" || name.hasPrefix("codex-") else {
+                return nil
+            }
+            return tokens.dropFirst().contains { String($0).lowercased() == "app-server" }
+                ? pid
+                : nil
+        }
+    }
+
+    private static func unique(_ paths: [String]) -> [String] {
+        var seen = Set<String>()
+        return paths.map { URL(fileURLWithPath: $0).standardizedFileURL.path }.filter {
+            seen.insert($0).inserted
+        }
     }
 }
 
@@ -475,23 +659,29 @@ final class CodexActivityMonitor: ObservableObject {
     @Published private(set) var snapshot = CodexActivitySnapshot.unavailable()
 
     private var task: Task<Void, Never>?
-    private let socketPath: String
-    private let sessionsDirectory: URL
+    private let socketPaths: [String]
+    private let sessionsDirectories: [URL]
     private let desktopStateURL: URL
+    private var discoveredSocketPaths: [String] = []
+    private var lastSocketDiscovery: Date?
     private var retainedActivities: [String: CodexActivity] = [:]
     private var acknowledgedActivityIDs = Set<String>()
     private var sessionScanCache = CodexSessionActivityScanCache()
 
     init(
-        socketPath: String = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".codex/app-server-control/app-server-control.sock").path,
-        sessionsDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".codex/sessions"),
+        socketPath: String? = nil,
+        sessionsDirectory: URL? = nil,
         desktopStateURL: URL? = nil
     ) {
-        self.socketPath = socketPath
-        self.sessionsDirectory = sessionsDirectory
-        self.desktopStateURL = desktopStateURL ?? sessionsDirectory.deletingLastPathComponent()
+        let environment = CodexActivityEnvironment.current()
+        let resolvedSessionsDirectories = sessionsDirectory.map { [$0] }
+            ?? environment.sessionsDirectories
+        self.socketPaths = Self.uniquePaths(
+            ([socketPath].compactMap { $0 }) + environment.socketPaths
+        )
+        self.sessionsDirectories = Self.uniqueURLs(resolvedSessionsDirectories)
+        let primarySessionsDirectory = resolvedSessionsDirectories[0]
+        self.desktopStateURL = desktopStateURL ?? primarySessionsDirectory.deletingLastPathComponent()
             .appendingPathComponent(".codex-global-state.json")
     }
 
@@ -509,6 +699,8 @@ final class CodexActivityMonitor: ObservableObject {
     func stop() {
         task?.cancel()
         task = nil
+        discoveredSocketPaths.removeAll()
+        lastSocketDiscovery = nil
         retainedActivities.removeAll()
         acknowledgedActivityIDs.removeAll()
         sessionScanCache = CodexSessionActivityScanCache()
@@ -596,14 +788,12 @@ final class CodexActivityMonitor: ObservableObject {
     private func monitorLoop() async {
         while !Task.isCancelled {
             do {
-                let client = try await CodexActivityClient(socketPath: socketPath)
-                let socketActivities = try await client.fetchActiveActivities()
+                let socketActivities = try await fetchSocketActivities()
                 guard let localActivities = await scanLocalActivities() else { return }
                 updateSnapshot(
                     with: merge(socketActivities, fileActivities: localActivities),
                     connectionIsHealthy: true
                 )
-                await client.close()
                 try await Task.sleep(for: .seconds(5))
             } catch is CancellationError {
                 return
@@ -618,14 +808,59 @@ final class CodexActivityMonitor: ObservableObject {
         }
     }
 
+    private func fetchSocketActivities() async throws -> [CodexActivity] {
+        var lastError: Error?
+        do {
+            return try await fetchSocketActivities(from: Self.uniquePaths(socketPaths + discoveredSocketPaths))
+        } catch {
+            lastError = error
+        }
+
+        let now = Date()
+        guard lastSocketDiscovery == nil || now.timeIntervalSince(lastSocketDiscovery!) >= 30 else {
+            throw lastError ?? CodexActivityError.connectionClosed
+        }
+
+        let discovered = await Task.detached(priority: .utility) {
+            CodexActivitySocketDiscovery.discover()
+        }.value
+        discoveredSocketPaths = Self.uniquePaths(discovered)
+        lastSocketDiscovery = now
+        do {
+            return try await fetchSocketActivities(from: Self.uniquePaths(socketPaths + discoveredSocketPaths))
+        } catch {
+            throw error
+        }
+    }
+
+    private func fetchSocketActivities(from paths: [String]) async throws -> [CodexActivity] {
+        var lastError: Error?
+        for path in paths {
+            do {
+                let client = try await CodexActivityClient(socketPath: path)
+                do {
+                    let activities = try await client.fetchActiveActivities()
+                    await client.close()
+                    return activities
+                } catch {
+                    await client.close()
+                    lastError = error
+                }
+            } catch {
+                lastError = error
+            }
+        }
+        throw lastError ?? CodexActivityError.connectionClosed
+    }
+
     private func scanLocalActivities() async -> [CodexActivity]? {
-        let sessionsDirectory = self.sessionsDirectory
+        let sessionsDirectories = self.sessionsDirectories
         let existingCache = sessionScanCache
         let scanTime = Date()
         let result = await Task.detached(priority: .utility) {
             var cache = existingCache
             let fileActivities = CodexSessionActivityScanner.scan(
-                sessionsDirectory: sessionsDirectory,
+                sessionsDirectories: sessionsDirectories,
                 now: scanTime,
                 cache: &cache
             )
@@ -724,6 +959,20 @@ final class CodexActivityMonitor: ObservableObject {
               !lhsTitle.isEmpty, !rhsTitle.isEmpty else { return false }
         return lhsTitle.caseInsensitiveCompare(rhsTitle) == .orderedSame
     }
+
+    private static func uniquePaths(_ paths: [String]) -> [String] {
+        var seen = Set<String>()
+        return paths.map { URL(fileURLWithPath: $0).standardizedFileURL.path }.filter {
+            seen.insert($0).inserted
+        }
+    }
+
+    private static func uniqueURLs(_ urls: [URL]) -> [URL] {
+        var seen = Set<String>()
+        return urls.map(\.standardizedFileURL).filter {
+            seen.insert($0.path).inserted
+        }
+    }
 }
 
 private final class CodexActivityClient: @unchecked Sendable {
@@ -741,6 +990,7 @@ private final class CodexActivityClient: @unchecked Sendable {
             "clientInfo": ["name": "token-menu-activity", "version": "1.0"],
             "capabilities": [:]
         ])
+        try await sendNotification(method: "initialized")
     }
 
     func fetchActiveActivities() async throws -> [CodexActivity] {
@@ -832,6 +1082,11 @@ private final class CodexActivityClient: @unchecked Sendable {
                 else { continuation.resume() }
             })
         }
+    }
+
+    private func sendNotification(method: String) async throws {
+        let data = try JSONSerialization.data(withJSONObject: ["method": method])
+        try await send(webSocketFrame(payload: data, opcode: 0x1))
     }
 
     private func receiveChunk() async throws -> Data {
