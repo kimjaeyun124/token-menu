@@ -591,29 +591,52 @@ enum ClaudeCodeActivityScanner {
     }
 }
 
-/// Finds non-default Unix sockets owned by a running Codex app-server. The
-/// default path is still tried first; this probe covers custom `--listen`
-/// paths and desktop/CLI installations that use different runtime layouts.
+struct CodexActivityRuntimePaths: Equatable, Sendable {
+    let socketPaths: [String]
+    let sessionsDirectories: [URL]
+}
+
+/// Finds runtime paths owned by a running Codex app-server. The default path
+/// is still tried first; this probe covers custom `--listen` paths and GUI
+/// launches that do not pass a shell's `CODEX_HOME` into Token Menu.
 enum CodexActivitySocketDiscovery {
-    static func discover() -> [String] {
+    static func discoverRuntimePaths() -> CodexActivityRuntimePaths {
         guard let ps = try? ProcessRunner.run(
             executableURL: URL(fileURLWithPath: "/bin/ps"),
             arguments: ["-axo", "pid=,command="]
-        ) else { return [] }
+        ) else {
+            return CodexActivityRuntimePaths(socketPaths: [], sessionsDirectories: [])
+        }
 
         let pids = appServerPIDs(in: ps.standardOutput)
         let lsofURL = ["/usr/sbin/lsof", "/usr/bin/lsof"]
             .map(URL.init(fileURLWithPath:))
             .first(where: { FileManager.default.isExecutableFile(atPath: $0.path) })
-        guard let lsofURL else { return [] }
+        guard let lsofURL else {
+            return CodexActivityRuntimePaths(socketPaths: [], sessionsDirectories: [])
+        }
 
-        return unique(pids.flatMap { pid -> [String] in
-            guard let output = try? ProcessRunner.run(
+        let paths = pids.reduce(
+            into: CodexActivityRuntimePaths(socketPaths: [], sessionsDirectories: [])
+        ) { result, pid in
+            let socketOutput = (try? ProcessRunner.run(
                 executableURL: lsofURL,
                 arguments: ["-Fn", "-a", "-p", String(pid), "-U"]
-            ) else { return [] }
-            return socketPaths(in: output.standardOutput)
-        })
+            )).map(\.standardOutput)
+            let sessionOutput = (try? ProcessRunner.run(
+                executableURL: lsofURL,
+                arguments: ["-Fn", "-a", "-p", String(pid)]
+            )).map(\.standardOutput)
+            let discoveredSockets = socketOutput.map { socketPaths(in: $0) } ?? []
+            let discoveredSessions = sessionOutput.map { runtimePaths(in: $0).sessionsDirectories } ?? []
+            result = CodexActivityRuntimePaths(
+                socketPaths: unique(result.socketPaths + discoveredSockets),
+                sessionsDirectories: uniqueURLs(
+                    result.sessionsDirectories + discoveredSessions
+                )
+            )
+        }
+        return paths
     }
 
     static func socketPaths(in lsofOutput: String) -> [String] {
@@ -627,6 +650,26 @@ enum CodexActivitySocketDiscovery {
             }
             return path
         })
+    }
+
+    static func runtimePaths(in lsofOutput: String) -> CodexActivityRuntimePaths {
+        let namedPaths = lsofOutput.split(whereSeparator: { $0 == "\n" }).compactMap { line -> String? in
+            let value = String(line)
+            guard value.hasPrefix("n"), value.count > 1 else { return nil }
+            let path = String(value.dropFirst())
+            return path.hasPrefix("/") && !path.hasPrefix("->") ? path : nil
+        }
+        let sessionsDirectories = uniqueURLs(namedPaths.compactMap { path in
+            guard let marker = path.range(of: "/sessions/"),
+                  path.hasSuffix(".jsonl") else { return nil }
+            return URL(
+                fileURLWithPath: String(path[..<marker.lowerBound]) + "/sessions"
+            )
+        })
+        return CodexActivityRuntimePaths(
+            socketPaths: socketPaths(in: lsofOutput).filter { !$0.hasSuffix(".jsonl") },
+            sessionsDirectories: sessionsDirectories
+        )
     }
 
     private static func appServerPIDs(in processOutput: String) -> [Int32] {
@@ -652,6 +695,13 @@ enum CodexActivitySocketDiscovery {
             seen.insert($0).inserted
         }
     }
+
+    private static func uniqueURLs(_ urls: [URL]) -> [URL] {
+        var seen = Set<String>()
+        return urls.map(\.standardizedFileURL).filter {
+            seen.insert($0.path).inserted
+        }
+    }
 }
 
 @MainActor
@@ -663,6 +713,7 @@ final class CodexActivityMonitor: ObservableObject {
     private let sessionsDirectories: [URL]
     private let desktopStateURL: URL
     private var discoveredSocketPaths: [String] = []
+    private var discoveredSessionsDirectories: [URL] = []
     private var lastSocketDiscovery: Date?
     private var retainedActivities: [String: CodexActivity] = [:]
     private var acknowledgedActivityIDs = Set<String>()
@@ -700,6 +751,7 @@ final class CodexActivityMonitor: ObservableObject {
         task?.cancel()
         task = nil
         discoveredSocketPaths.removeAll()
+        discoveredSessionsDirectories.removeAll()
         lastSocketDiscovery = nil
         retainedActivities.removeAll()
         acknowledgedActivityIDs.removeAll()
@@ -822,9 +874,10 @@ final class CodexActivityMonitor: ObservableObject {
         }
 
         let discovered = await Task.detached(priority: .utility) {
-            CodexActivitySocketDiscovery.discover()
+            CodexActivitySocketDiscovery.discoverRuntimePaths()
         }.value
-        discoveredSocketPaths = Self.uniquePaths(discovered)
+        discoveredSocketPaths = Self.uniquePaths(discovered.socketPaths)
+        discoveredSessionsDirectories = Self.uniqueURLs(discovered.sessionsDirectories)
         lastSocketDiscovery = now
         do {
             return try await fetchSocketActivities(from: Self.uniquePaths(socketPaths + discoveredSocketPaths))
@@ -854,7 +907,9 @@ final class CodexActivityMonitor: ObservableObject {
     }
 
     private func scanLocalActivities() async -> [CodexActivity]? {
-        let sessionsDirectories = self.sessionsDirectories
+        let sessionsDirectories = Self.uniqueURLs(
+            self.sessionsDirectories + discoveredSessionsDirectories
+        )
         let existingCache = sessionScanCache
         let scanTime = Date()
         let result = await Task.detached(priority: .utility) {
