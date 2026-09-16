@@ -37,7 +37,8 @@ enum ProviderIconAsset {
     }()
 }
 
-private extension ProviderIconColor {
+// Shared by concrete provider icons and the menu bar's attributed text.
+extension ProviderIconColor {
     var nsColor: NSColor {
         switch self {
         case .white: return .white

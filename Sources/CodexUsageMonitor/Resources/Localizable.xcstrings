@@ -158,6 +158,7 @@
     "display.critical" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Critical at or below: %d%%"}},"ko":{"stringUnit":{"state":"translated","value":"위험 기준: %d%% 이하"}}}},
     "display.icons" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Show Provider Icons"}},"ko":{"stringUnit":{"state":"translated","value":"AI 아이콘 표시"}}}},
     "display.icon_color" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Icon Color"}},"ko":{"stringUnit":{"state":"translated","value":"아이콘 색상"}}}},
+    "display.icon_color_note" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Applies to provider icons and menu bar text."}},"ko":{"stringUnit":{"state":"translated","value":"AI 아이콘과 메뉴바 텍스트에 적용됩니다."}}}},
     "display.popover" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Usage Popover"}},"ko":{"stringUnit":{"state":"translated","value":"사용량 창"}}}},
     "display.popover_size" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Popover Size"}},"ko":{"stringUnit":{"state":"translated","value":"사용량 창 크기"}}}},
     "display.popover_width" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Popover Width"}},"ko":{"stringUnit":{"state":"translated","value":"사용량 창 너비"}}}},

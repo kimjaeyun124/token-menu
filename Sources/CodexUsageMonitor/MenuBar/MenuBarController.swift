@@ -101,12 +101,12 @@ final class MenuBarController: NSObject {
             statusItem.button?.image = providerIcons(
                 for: presentation.segments.map(\.provider),
                 color: settings.providerIconColor
-            ) ?? unavailableIcon
+            ) ?? unavailableIcon(for: settings.providerIconColor)
             statusItem.button?.imagePosition = .imageOnly
         } else if presentation.text.isEmpty {
             statusItem.button?.attributedTitle = NSAttributedString()
             statusItem.button?.title = ""
-            statusItem.button?.image = unavailableIcon
+            statusItem.button?.image = unavailableIcon(for: settings.providerIconColor)
             statusItem.button?.imagePosition = .imageOnly
         } else {
             statusItem.button?.image = nil
@@ -136,11 +136,23 @@ final class MenuBarController: NSObject {
         )
     }
 
-    private var unavailableIcon: NSImage {
-        NSImage(
+    private func unavailableIcon(for color: ProviderIconColor) -> NSImage {
+        let accessibilityDescription = settingsStore.localized("app.title")
+        guard let source = NSImage(
             systemSymbolName: "gauge",
-            accessibilityDescription: settingsStore.localized("app.title")
-        ) ?? NSImage()
+            accessibilityDescription: accessibilityDescription
+        ) else { return NSImage() }
+
+        let result = NSImage(size: source.size)
+        let rect = NSRect(origin: .zero, size: source.size)
+        result.lockFocus()
+        color.nsColor.setFill()
+        rect.fill()
+        source.draw(in: rect, from: .zero, operation: .destinationIn, fraction: 1)
+        result.unlockFocus()
+        result.isTemplate = false
+        result.accessibilityDescription = accessibilityDescription
+        return result
     }
 
     private func providerIcons(for providers: [AIProvider], color: ProviderIconColor) -> NSImage? {
@@ -185,25 +197,29 @@ final class MenuBarController: NSObject {
     ) -> NSAttributedString {
         let result = NSMutableAttributedString()
         let font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .medium)
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: settings.providerIconColor.nsColor
+        ]
         let showIcon = settings.providerIdentification == .icon
             || settings.providerIdentification == .iconAndName
 
         for (index, segment) in presentation.segments.enumerated() {
             if index > 0 {
-                result.append(NSAttributedString(string: " / ", attributes: [.font: font]))
+                result.append(NSAttributedString(string: " / ", attributes: attributes))
             }
             if showIcon, let image = providerIcon(segment.provider, color: settings.providerIconColor) {
                 let attachment = NSTextAttachment()
                 attachment.image = image
                 attachment.bounds = NSRect(x: 0, y: -2, width: 14, height: 14)
                 result.append(NSAttributedString(attachment: attachment))
-                result.append(NSAttributedString(string: " ", attributes: [.font: font]))
+                result.append(NSAttributedString(string: " ", attributes: attributes))
             }
-            result.append(NSAttributedString(string: segment.text, attributes: [.font: font]))
+            result.append(NSAttributedString(string: segment.text, attributes: attributes))
         }
 
         if result.length == 0 {
-            result.append(NSAttributedString(string: presentation.text, attributes: [.font: font]))
+            result.append(NSAttributedString(string: presentation.text, attributes: attributes))
         }
         return result
     }

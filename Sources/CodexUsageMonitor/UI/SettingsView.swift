@@ -316,7 +316,9 @@ struct SettingsView: View {
                         Text(l(color.localizationKey)).tag(color)
                     }
                 }
-                .disabled(!settingsStore.settings.showProviderIcons)
+                Text(l("display.icon_color_note"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Section(l("display.thresholds")) {
                 Stepper(l("display.warning", settingsStore.settings.warningThreshold), value: settingsStore.binding(\.warningThreshold), in: 1...100)
