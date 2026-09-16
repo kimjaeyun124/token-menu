@@ -97,7 +97,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // first poll. Do not treat that bootstrap value as a real baseline.
         guard snapshot.isConnected || !snapshot.activities.isEmpty else { return }
         let completedIDs = Set(snapshot.activities.compactMap { activity in
-            activity.state == .completed ? activity.id : nil
+            activity.provider == .codex && activity.state == .completed ? activity.id : nil
         })
         if !hasInitializedActivityNotifications {
             notifiedActivityIDs = completedIDs
@@ -114,7 +114,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        for activity in snapshot.activities where activity.state == .completed {
+        for activity in snapshot.activities where activity.provider == .codex && activity.state == .completed {
             guard notifiedActivityIDs.insert(activity.id).inserted else { continue }
             let content = UNMutableNotificationContent()
             content.title = settingsStore.localized("notification.activity_completed_title")

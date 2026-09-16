@@ -566,6 +566,13 @@ final class CodexActivityMonitor: ObservableObject {
         if connectionIsHealthy {
             for previous in snapshot.activities where !incomingIDs.contains(previous.id) {
                 guard previous.state != .completed else { continue }
+                guard previous.provider == .codex else {
+                    // Claude Code is discovered from the current process list,
+                    // which has no completion marker. Its disappearance is
+                    // only evidence that the process is no longer active.
+                    retainedActivities.removeValue(forKey: previous.id)
+                    continue
+                }
                 // A project can have multiple back-to-back turns. If another
                 // turn in the same project is still active, suppress the old
                 // row instead of falsely showing a completed task beside it.
