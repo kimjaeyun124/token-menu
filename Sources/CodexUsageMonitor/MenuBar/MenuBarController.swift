@@ -103,6 +103,17 @@ final class MenuBarController: NSObject {
                 color: settings.providerIconColor
             ) ?? unavailableIcon(for: settings.providerIconColor)
             statusItem.button?.imagePosition = .imageOnly
+        } else if settings.menuBarFormat == .iconPercentage {
+            statusItem.button?.title = ""
+            statusItem.button?.image = providerIcons(
+                for: presentation.segments.map(\.provider),
+                color: settings.providerIconColor
+            ) ?? unavailableIcon(for: settings.providerIconColor)
+            statusItem.button?.imagePosition = .imageLeft
+            statusItem.button?.attributedTitle = iconPercentageTitle(
+                for: presentation,
+                settings: settings
+            )
         } else if presentation.text.isEmpty {
             statusItem.button?.attributedTitle = NSAttributedString()
             statusItem.button?.title = ""
@@ -125,6 +136,7 @@ final class MenuBarController: NSObject {
                 : settingsStore.localized("accessibility.usage_unavailable")
         )
         let iconCount = (settings.menuBarFormat == .iconOnly
+            || settings.menuBarFormat == .iconPercentage
             || settings.providerIdentification == .icon
             || settings.providerIdentification == .iconAndName)
             ? presentation.segments.reduce(into: 0) { count, segment in
@@ -222,6 +234,22 @@ final class MenuBarController: NSObject {
             result.append(NSAttributedString(string: presentation.text, attributes: attributes))
         }
         return result
+    }
+
+    private func iconPercentageTitle(
+        for presentation: MenuBarPresentation,
+        settings: AppSettings
+    ) -> NSAttributedString {
+        guard !presentation.text.isEmpty else { return NSAttributedString() }
+        let font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .medium)
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: settings.providerIconColor.nsColor
+        ]
+        return NSAttributedString(
+            string: " | \(presentation.text)",
+            attributes: attributes
+        )
     }
 
     private func providerIcon(_ provider: AIProvider, color: ProviderIconColor) -> NSImage? {

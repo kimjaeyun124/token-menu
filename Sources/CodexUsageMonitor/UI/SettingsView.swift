@@ -502,7 +502,11 @@ struct SettingsView: View {
     }
 
     private func localizedFormat(_ format: MenuBarFormat) -> String {
-        format == .iconOnly ? l("option.icon_only") : format.title
+        switch format {
+        case .iconOnly: return l("option.icon_only")
+        case .iconPercentage: return l("option.icon_percentage")
+        default: return format.title
+        }
     }
 
     private func localizedUnavailable(_ value: UnavailableDisplay) -> String {
@@ -527,7 +531,14 @@ struct SettingsView: View {
             lastUpdated: Date(),
             source: "Preview"
         )
-        return MenuBarPresentation.resolve(usages: [.codex: sample], settings: settingsStore.settings).text
+        let text = MenuBarPresentation.resolve(
+            usages: [.codex: sample],
+            settings: settingsStore.settings
+        ).text
+        if settingsStore.settings.menuBarFormat == .iconPercentage {
+            return "\(l("option.icon")) | \(text)"
+        }
+        return text
     }
 
     private func localizedSource(_ source: String) -> String {

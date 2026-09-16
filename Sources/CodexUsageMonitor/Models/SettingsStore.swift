@@ -79,7 +79,7 @@ enum MenuBarLimitChoice: String, Codable, CaseIterable, Identifiable, Sendable {
 }
 
 enum MenuBarFormat: String, Codable, CaseIterable, Identifiable, Sendable {
-    case pipe, space, dot, percentageOnly, iconOnly
+    case pipe, space, dot, percentageOnly, iconOnly, iconPercentage
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -88,6 +88,7 @@ enum MenuBarFormat: String, Codable, CaseIterable, Identifiable, Sendable {
         case .dot: return "5H · 28%"
         case .percentageOnly: return "28%"
         case .iconOnly: return "Icon Only"
+        case .iconPercentage: return "Icon | 28%"
         }
     }
 }

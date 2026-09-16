@@ -116,9 +116,13 @@ struct MenuBarPresentation: Equatable, Sendable {
             return unavailable(label: "AI", settings: settings)
         }
         let visibleSegments = settings.menuBarFormat == .iconOnly
+            || settings.menuBarFormat == .iconPercentage
             ? segments
             : segments.filter { !$0.text.isEmpty }
-        let text = visibleSegments.map(\.text).joined(separator: " / ")
+        let textSegments = settings.menuBarFormat == .iconPercentage
+            ? visibleSegments.filter { !$0.text.isEmpty }
+            : visibleSegments
+        let text = textSegments.map(\.text).joined(separator: " / ")
         return MenuBarPresentation(
             provider: segments.count == 1 ? segments[0].provider : nil,
             label: segments.count == 1 ? segments[0].label : "AI",
@@ -233,8 +237,10 @@ struct MenuBarPresentation: Equatable, Sendable {
         case .pipe: core = "\(label) | \(value)"
         case .space: core = "\(label) \(value)"
         case .dot: core = "\(label) · \(value)"
-        case .percentageOnly: core = value
-        case .iconOnly: core = value
+        case .percentageOnly, .iconOnly, .iconPercentage: core = value
+        }
+        if settings.menuBarFormat == .iconPercentage {
+            return core
         }
         let identification: ProviderIdentification = settings.showProviderName
             ? (settings.providerIdentification == .icon

@@ -87,6 +87,7 @@
     "option.reset_time" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Reset Time"}},"ko":{"stringUnit":{"state":"translated","value":"초기화 시각"}}}},
     "option.icon" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Icon"}},"ko":{"stringUnit":{"state":"translated","value":"아이콘"}}}},
     "option.icon_only" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Icon Only"}},"ko":{"stringUnit":{"state":"translated","value":"아이콘만"}}}},
+    "option.icon_percentage" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Icon | 28%"}},"ko":{"stringUnit":{"state":"translated","value":"아이콘 | 28%"}}}},
     "option.icon_color_accent" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Accent"}},"ko":{"stringUnit":{"state":"translated","value":"강조 색상"}}}},
     "option.icon_color_black" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Black"}},"ko":{"stringUnit":{"state":"translated","value":"검정"}}}},
     "option.icon_color_secondary" : {"localizations":{"en":{"stringUnit":{"state":"translated","value":"Secondary"}},"ko":{"stringUnit":{"state":"translated","value":"보조 색상"}}}},
