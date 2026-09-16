@@ -71,6 +71,35 @@ final class CodexDesktopReadStateTests: XCTestCase {
     }
 
     @MainActor
+    func testUnchangedActivityPollDoesNotAdvanceSnapshotTimestamp() {
+        let monitor = CodexActivityMonitor(
+            desktopStateURL: FileManager.default.temporaryDirectory
+                .appendingPathComponent("token-menu-unchanged-snapshot-\(UUID().uuidString).json")
+        )
+        let first = activity(
+            id: "claude:123",
+            state: .working,
+            provider: .claudeCode,
+            updatedAt: now
+        )
+        let sameActivityWithNewPollTime = activity(
+            id: "claude:123",
+            state: .working,
+            provider: .claudeCode,
+            updatedAt: now.addingTimeInterval(5)
+        )
+
+        monitor.updateSnapshot(with: [first], connectionIsHealthy: true, at: now)
+        monitor.updateSnapshot(
+            with: [sameActivityWithNewPollTime],
+            connectionIsHealthy: true,
+            at: now.addingTimeInterval(5)
+        )
+
+        XCTAssertEqual(monitor.snapshot.lastUpdated, now)
+    }
+
+    @MainActor
     func testCodexProcessDisappearanceStillInfersCompletion() {
         let monitor = CodexActivityMonitor(
             desktopStateURL: FileManager.default.temporaryDirectory

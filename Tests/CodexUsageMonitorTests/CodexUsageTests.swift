@@ -108,6 +108,32 @@ final class CodexUsageTests: XCTestCase {
         XCTAssertEqual(completedActivity?.chatGPTThreadID, "session-1")
     }
 
+    func testCodexSessionScannerReadsLifecycleEdgesFromLargeRollout() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("token-menu-large-rollout-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let file = directory.appendingPathComponent("rollout.jsonl")
+        let prefix = Data(#"{"type":"session_meta","payload":{"session_id":"session-1","cwd":"/Users/example/alpha-project"}}"#.utf8)
+        let suffix = Data(#"""
+        {"type":"event_msg","payload":{"type":"task_started","turn_id":"turn-1","started_at":1700000000}}
+        {"type":"event_msg","payload":{"type":"task_complete","turn_id":"turn-1"}}
+        """#.utf8)
+        let data = prefix + Data(repeating: 0x20, count: 1_500 * 1024) + Data("\n".utf8) + suffix
+        try data.write(to: file)
+
+        let activities = CodexSessionActivityScanner.scan(
+            sessionsDirectory: directory,
+            now: Date(),
+            freshness: 60
+        )
+        XCTAssertEqual(activities.count, 1)
+        XCTAssertEqual(activities.first?.id, "rollout:turn-1")
+        XCTAssertEqual(activities.first?.state, .completed)
+        XCTAssertEqual(activities.first?.title, "alpha-project")
+    }
+
     func testCodexActivityDeepLinkUsesChatGPTThreadID() {
         let activity = CodexActivity(
             id: "rollout:turn-1",
