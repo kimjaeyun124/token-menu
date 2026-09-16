@@ -192,12 +192,36 @@ enum CodexActivityParser {
 /// client uses a stdio app-server, so its active turn is not always visible on
 /// the control socket used by the CLI daemon. Prompt and tool contents are
 /// intentionally ignored.
+struct CodexSessionActivityScanCache: Sendable {
+    fileprivate struct Entry: Sendable {
+        let modifiedAt: Date
+        let activity: CodexActivity?
+    }
+
+    fileprivate var entries: [String: Entry] = [:]
+}
+
 enum CodexSessionActivityScanner {
     static func scan(
         sessionsDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".codex/sessions"),
         now: Date = Date(),
         freshness: TimeInterval = 15 * 60
+    ) -> [CodexActivity] {
+        var cache = CodexSessionActivityScanCache()
+        return scan(
+            sessionsDirectory: sessionsDirectory,
+            now: now,
+            freshness: freshness,
+            cache: &cache
+        )
+    }
+
+    static func scan(
+        sessionsDirectory: URL,
+        now: Date = Date(),
+        freshness: TimeInterval = 15 * 60,
+        cache: inout CodexSessionActivityScanCache
     ) -> [CodexActivity] {
         let fileManager = FileManager.default
         guard let enumerator = fileManager.enumerator(
@@ -217,12 +241,25 @@ enum CodexSessionActivityScanner {
         // Most rollout files are historical and can be very large. Only the
         // most recently modified candidates can contain a live turn, keeping
         // the menu-bar refresh responsive even with a long session history.
-        return candidates
+        let recentCandidates = candidates
             .sorted { $0.1 > $1.1 }
             .prefix(20)
+
+        let recentPaths = Set(recentCandidates.map { $0.0.path })
+        cache.entries = cache.entries.filter { recentPaths.contains($0.key) }
+
+        return recentCandidates
             .compactMap { url, modifiedAt in
+                if let cached = cache.entries[url.path], cached.modifiedAt == modifiedAt {
+                    return cached.activity
+                }
                 guard let data = try? readLifecycleData(of: url) else { return nil }
-                return parse(data: data, updatedAt: modifiedAt, now: now)
+                let activity = parse(data: data, updatedAt: modifiedAt, now: now)
+                cache.entries[url.path] = CodexSessionActivityScanCache.Entry(
+                    modifiedAt: modifiedAt,
+                    activity: activity
+                )
+                return activity
             }
             .sorted { ($0.startedAt ?? $0.updatedAt) > ($1.startedAt ?? $1.updatedAt) }
     }
@@ -361,13 +398,33 @@ enum CodexSessionActivityScanner {
         return String(value.trimmingCharacters(in: .whitespacesAndNewlines).prefix(80))
     }
 
+    private static let maxLifecycleReadBytes = 1 * 1024 * 1024
+    private static let sessionMetadataReadBytes = 64 * 1024
+
     private static func readLifecycleData(of url: URL) throws -> Data {
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
-        // Rollout files can grow beyond a fixed tail window during a long task.
-        // Read the file once, but retain only lifecycle fields while parsing so
-        // prompt and tool contents are never surfaced to the UI or snapshot.
-        return try handle.readToEnd() ?? Data()
+        let fileSize = try handle.seekToEnd()
+        let maxReadBytes = UInt64(maxLifecycleReadBytes)
+        guard fileSize > maxReadBytes else {
+            try handle.seek(toOffset: 0)
+            return try handle.readToEnd() ?? Data()
+        }
+
+        // A rollout can contain gigabytes of prompt/tool output. Session
+        // metadata is at the beginning and the latest lifecycle markers are
+        // at the end, so keep only those two bounded regions.
+        let prefixLength = min(UInt64(sessionMetadataReadBytes), maxReadBytes / 2)
+        let suffixLength = maxReadBytes - prefixLength
+        try handle.seek(toOffset: 0)
+        let prefix = try handle.read(upToCount: Int(prefixLength)) ?? Data()
+        try handle.seek(toOffset: fileSize - suffixLength)
+        let suffix = try handle.read(upToCount: Int(suffixLength)) ?? Data()
+
+        var result = prefix
+        result.append(0x0A)
+        result.append(suffix)
+        return result
     }
 }
 
@@ -423,6 +480,7 @@ final class CodexActivityMonitor: ObservableObject {
     private let desktopStateURL: URL
     private var retainedActivities: [String: CodexActivity] = [:]
     private var acknowledgedActivityIDs = Set<String>()
+    private var sessionScanCache = CodexSessionActivityScanCache()
 
     init(
         socketPath: String = FileManager.default.homeDirectoryForCurrentUser
@@ -453,6 +511,7 @@ final class CodexActivityMonitor: ObservableObject {
         task = nil
         retainedActivities.removeAll()
         acknowledgedActivityIDs.removeAll()
+        sessionScanCache = CodexSessionActivityScanCache()
         snapshot = .unavailable()
     }
 
@@ -484,8 +543,11 @@ final class CodexActivityMonitor: ObservableObject {
             connectionIsHealthy: connectionIsHealthy,
             at: now
         )
+        let visible = unreviewedActivities(retained, at: now)
+        guard activitiesChanged(from: snapshot.activities, to: visible)
+            || snapshot.isConnected != connectionIsHealthy else { return }
         snapshot = CodexActivitySnapshot(
-            activities: unreviewedActivities(retained, at: now),
+            activities: visible,
             isConnected: connectionIsHealthy,
             lastUpdated: now
         )
@@ -515,15 +577,30 @@ final class CodexActivityMonitor: ObservableObject {
         }
     }
 
+    private func activitiesChanged(from previous: [CodexActivity], to current: [CodexActivity]) -> Bool {
+        guard previous.count == current.count else { return true }
+        for (old, new) in zip(previous, current) {
+            guard old.id == new.id,
+                  old.title == new.title,
+                  old.chatGPTThreadID == new.chatGPTThreadID,
+                  old.provider == new.provider,
+                  old.state == new.state,
+                  old.startedAt == new.startedAt else { return true }
+            // Claude process discovery has no stable timestamp; its scanner
+            // supplies the current poll time for an otherwise identical PID.
+            if new.provider != .claudeCode, old.updatedAt != new.updatedAt { return true }
+        }
+        return false
+    }
+
     private func monitorLoop() async {
         while !Task.isCancelled {
             do {
                 let client = try await CodexActivityClient(socketPath: socketPath)
                 let socketActivities = try await client.fetchActiveActivities()
-                let fileActivities = CodexSessionActivityScanner.scan(sessionsDirectory: sessionsDirectory)
-                let claudeActivities = ClaudeCodeActivityScanner.scan()
+                guard let localActivities = await scanLocalActivities() else { return }
                 updateSnapshot(
-                    with: merge(socketActivities, fileActivities: fileActivities + claudeActivities),
+                    with: merge(socketActivities, fileActivities: localActivities),
                     connectionIsHealthy: true
                 )
                 await client.close()
@@ -531,15 +608,33 @@ final class CodexActivityMonitor: ObservableObject {
             } catch is CancellationError {
                 return
             } catch {
-                let fallbackActivities = CodexSessionActivityScanner.scan(sessionsDirectory: sessionsDirectory)
-                let claudeActivities = ClaudeCodeActivityScanner.scan()
+                guard let localActivities = await scanLocalActivities() else { return }
                 updateSnapshot(
-                    with: merge([], fileActivities: fallbackActivities + claudeActivities),
+                    with: merge([], fileActivities: localActivities),
                     connectionIsHealthy: false
                 )
                 try? await Task.sleep(for: .seconds(30))
             }
         }
+    }
+
+    private func scanLocalActivities() async -> [CodexActivity]? {
+        let sessionsDirectory = self.sessionsDirectory
+        let existingCache = sessionScanCache
+        let scanTime = Date()
+        let result = await Task.detached(priority: .utility) {
+            var cache = existingCache
+            let fileActivities = CodexSessionActivityScanner.scan(
+                sessionsDirectory: sessionsDirectory,
+                now: scanTime,
+                cache: &cache
+            )
+            let claudeActivities = ClaudeCodeActivityScanner.scan(now: scanTime)
+            return (fileActivities + claudeActivities, cache)
+        }.value
+        guard !Task.isCancelled else { return nil }
+        sessionScanCache = result.1
+        return result.0
     }
 
     private func merge(_ socketActivities: [CodexActivity], fileActivities: [CodexActivity]) -> [CodexActivity] {

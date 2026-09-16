@@ -91,7 +91,6 @@ struct UsageWindowView: View {
         .padding(settings.popoverSize == .compact ? 13 : 18)
         .frame(width: settings.popoverWidth.points)
         .environment(\.locale, settings.language.locale)
-        .onAppear { refreshService.popoverOpened() }
     }
 
     @ViewBuilder
