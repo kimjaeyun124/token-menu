@@ -408,6 +408,58 @@ final class CodexUsageTests: XCTestCase {
         XCTAssertEqual(value.text, "5H | 28%")
     }
 
+    @MainActor
+    func testIconOnlyMenuBarFormatOmitsLimitLabelsAndKeepsProviderSegment() {
+        let store = makeStore()
+        store.settings.menuBarFormat = .iconOnly
+        let usage = makeUsage(provider: .codex, fiveHour: 28, weekly: 84)
+
+        let value = MenuBarPresentation.resolve(usages: [.codex: usage], settings: store.settings)
+
+        XCTAssertEqual(value.text, "28%")
+        XCTAssertFalse(value.text.contains("5H"))
+        XCTAssertFalse(value.text.contains("Weekly"))
+        XCTAssertEqual(value.segments.map(\.provider), [.codex])
+    }
+
+    @MainActor
+    func testIconOnlyMenuBarFormatKeepsBothProviderSegments() {
+        let store = makeStore()
+        store.settings.menuBarProvider = .both
+        store.settings.menuBarFormat = .iconOnly
+        let codex = makeUsage(provider: .codex, fiveHour: 28, weekly: nil)
+        let claude = makeUsage(provider: .claudeCode, fiveHour: 71, weekly: nil)
+
+        let value = MenuBarPresentation.resolve(
+            usages: [.codex: codex, .claudeCode: claude],
+            settings: store.settings
+        )
+
+        XCTAssertEqual(value.text, "28% / 71%")
+        XCTAssertEqual(value.segments.map(\.provider), [.codex, .claudeCode])
+    }
+
+    @MainActor
+    func testIconOnlyMenuBarFormatKeepsProviderSegmentWhenUsageIsHidden() {
+        let store = makeStore()
+        store.settings.menuBarFormat = .iconOnly
+        store.settings.unavailableDisplay = .hidden
+
+        let value = MenuBarPresentation.resolve(usages: [:], settings: store.settings)
+
+        XCTAssertTrue(value.text.isEmpty)
+        XCTAssertEqual(value.segments.map(\.provider), [.codex])
+    }
+
+    @MainActor
+    func testIconOnlyMenuBarFormatPersists() {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let store = SettingsStore(defaults: defaults)
+        store.settings.menuBarFormat = .iconOnly
+
+        XCTAssertEqual(SettingsStore(defaults: defaults).settings.menuBarFormat, .iconOnly)
+    }
+
     func testPercentageFormatterUsesWholeNumberRounding() {
         XCTAssertEqual(PercentageFormatter.string(for: 0), "0%")
         XCTAssertEqual(PercentageFormatter.string(for: 1), "1%")
@@ -607,6 +659,7 @@ final class CodexUsageTests: XCTestCase {
         store.settings.language = .english
         XCTAssertEqual(store.localized("category.refresh"), "Usage Refresh")
         XCTAssertEqual(store.localized("display.icon_color"), "Icon Color")
+        XCTAssertEqual(store.localized("option.icon_only"), "Icon Only")
         XCTAssertEqual(store.localized("notifications.activity_completed"), "Codex Task Completion")
         XCTAssertEqual(store.localized("notifications.reset"), "Usage Limit Reset")
         XCTAssertEqual(store.localized("notifications.enabled"), "Notifications Enabled")
@@ -616,6 +669,7 @@ final class CodexUsageTests: XCTestCase {
         store.settings.language = .korean
         XCTAssertEqual(store.localized("category.refresh"), "사용량 확인")
         XCTAssertEqual(store.localized("option.icon_color_white"), "흰색")
+        XCTAssertEqual(store.localized("option.icon_only"), "아이콘만")
     }
 
     @MainActor
