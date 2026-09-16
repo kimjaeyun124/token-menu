@@ -78,6 +78,46 @@ final class CodexUsageTests: XCTestCase {
         XCTAssertEqual(merged.updatedAt, Date(timeIntervalSince1970: 1_700_000_300))
     }
 
+    func testCodexActivityParserAcceptsAlternateThreadListAndMissingTimestamps() throws {
+        let now = Date(timeIntervalSince1970: 1_700_000_500)
+        let list = Data(#"""
+        {"result":{"threads":[
+          {"id":"thread-compatible","name":"Compatible","status":{"type":"active"},"turns":[]}
+        ]}}
+        """#.utf8)
+
+        let activities = try CodexActivityParser.parseThreadList(responseData: list, now: now)
+
+        XCTAssertEqual(activities.map(\.id), ["thread-compatible"])
+        XCTAssertEqual(activities.first?.state, .working)
+        XCTAssertEqual(activities.first?.updatedAt, now)
+    }
+
+    func testCodexActivityEnvironmentUsesConfiguredHomeAndDefaultFallback() {
+        let home = URL(fileURLWithPath: "/Users/example")
+        let environment = CodexActivityEnvironment.current(
+            homeDirectory: home,
+            environment: ["CODEX_HOME": "~/Library/Application Support/Codex"]
+        )
+
+        XCTAssertEqual(
+            environment.sessionsDirectories.map(\.path),
+            [
+                "/Users/example/Library/Application Support/Codex/sessions",
+                "/Users/example/.codex/sessions"
+            ]
+        )
+        XCTAssertEqual(
+            environment.socketPaths,
+            [
+                "/Users/example/Library/Application Support/Codex/app-server-control/app-server-control.sock",
+                "/Users/example/Library/Application Support/Codex/app-server-control.sock",
+                "/Users/example/.codex/app-server-control/app-server-control.sock",
+                "/Users/example/.codex/app-server-control.sock"
+            ]
+        )
+    }
+
     func testCodexSessionScannerFindsUnfinishedDesktopTurnWithoutReadingPrompt() throws {
         let now = Date(timeIntervalSince1970: 1_700_000_100)
         let data = Data(#"""
@@ -106,6 +146,23 @@ final class CodexUsageTests: XCTestCase {
         XCTAssertEqual(completedActivity?.id, "rollout:turn-1")
         XCTAssertEqual(completedActivity?.state, .completed)
         XCTAssertEqual(completedActivity?.chatGPTThreadID, "session-1")
+    }
+
+    func testCodexSessionScannerAcceptsTopLevelAndStringLifecycleFields() {
+        let now = Date(timeIntervalSince1970: 1_700_000_100)
+        let data = Data(#"""
+        {"type": "session_meta", "session_id": "session-2", "cwd": "/Users/example/beta-project"}
+        {"type": "turn_started", "id": "turn-2", "started_at": "1700000000"}
+        {"type": "turn_completed"}
+        """#.utf8)
+
+        let activity = CodexSessionActivityScanner.parse(data: data, updatedAt: now, now: now)
+
+        XCTAssertEqual(activity?.id, "rollout:turn-2")
+        XCTAssertEqual(activity?.title, "beta-project")
+        XCTAssertEqual(activity?.chatGPTThreadID, "session-2")
+        XCTAssertEqual(activity?.state, .completed)
+        XCTAssertEqual(activity?.startedAt, Date(timeIntervalSince1970: 1_700_000_000))
     }
 
     func testCodexSessionScannerReadsLifecycleEdgesFromLargeRollout() throws {
@@ -229,11 +286,27 @@ final class CodexUsageTests: XCTestCase {
             101 /usr/local/bin/claude --resume
             102 /bin/zsh -lc claude
             103 /opt/homebrew/bin/claude-code
+            104 /opt/homebrew/bin/node /opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js
+            105 /bin/zsh -lc claude-code
             """
         )
 
-        XCTAssertEqual(activities.map(\.id), ["claude:101", "claude:103"])
+        XCTAssertEqual(activities.map(\.id), ["claude:101", "claude:103", "claude:104"])
         XCTAssertTrue(activities.allSatisfy { $0.provider == .claudeCode && $0.state == .working })
+    }
+
+    func testCodexActivitySocketDiscoveryKeepsNamedUnixSockets() {
+        let paths = CodexActivitySocketDiscovery.socketPaths(in: """
+        p123
+        f11
+        n/private/tmp/codex-custom.sock
+        f12
+        n/private/tmp/custom-app-server
+        f13
+        n->0x123456
+        """)
+
+        XCTAssertEqual(paths, ["/private/tmp/codex-custom.sock", "/private/tmp/custom-app-server"])
     }
 
     func testCodexParserSelectsCodexBucket() throws {
