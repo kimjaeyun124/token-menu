@@ -95,13 +95,18 @@ final class MenuBarController: NSObject {
             )
         )
 
-        if presentation.text.isEmpty {
+        if settings.menuBarFormat == .iconOnly {
             statusItem.button?.attributedTitle = NSAttributedString()
             statusItem.button?.title = ""
-            statusItem.button?.image = NSImage(
-                systemSymbolName: "gauge",
-                accessibilityDescription: settingsStore.localized("app.title")
-            )
+            statusItem.button?.image = providerIcons(
+                for: presentation.segments.map(\.provider),
+                color: settings.providerIconColor
+            ) ?? unavailableIcon
+            statusItem.button?.imagePosition = .imageOnly
+        } else if presentation.text.isEmpty {
+            statusItem.button?.attributedTitle = NSAttributedString()
+            statusItem.button?.title = ""
+            statusItem.button?.image = unavailableIcon
             statusItem.button?.imagePosition = .imageOnly
         } else {
             statusItem.button?.image = nil
@@ -119,7 +124,8 @@ final class MenuBarController: NSObject {
                 )
                 : settingsStore.localized("accessibility.usage_unavailable")
         )
-        let iconCount = (settings.providerIdentification == .icon
+        let iconCount = (settings.menuBarFormat == .iconOnly
+            || settings.providerIdentification == .icon
             || settings.providerIdentification == .iconAndName)
             ? presentation.segments.reduce(into: 0) { count, segment in
                 if providerIcon(segment.provider, color: settings.providerIconColor) != nil { count += 1 }
@@ -128,6 +134,42 @@ final class MenuBarController: NSObject {
         logger.notice(
             "Menu bar label updated: \(presentation.text.isEmpty ? "hidden" : presentation.text, privacy: .public); provider icons: \(iconCount); icon color: \(settings.providerIconColor.rawValue, privacy: .public)"
         )
+    }
+
+    private var unavailableIcon: NSImage {
+        NSImage(
+            systemSymbolName: "gauge",
+            accessibilityDescription: settingsStore.localized("app.title")
+        ) ?? NSImage()
+    }
+
+    private func providerIcons(for providers: [AIProvider], color: ProviderIconColor) -> NSImage? {
+        let icons = providers.compactMap { providerIcon($0, color: color) }
+        guard !icons.isEmpty else { return nil }
+        guard icons.count > 1 else { return icons[0] }
+
+        let iconSize: CGFloat = 14
+        let spacing: CGFloat = 3
+        let result = NSImage(
+            size: NSSize(
+                width: iconSize * CGFloat(icons.count) + spacing * CGFloat(icons.count - 1),
+                height: 16
+            )
+        )
+        result.lockFocus()
+        for (index, icon) in icons.enumerated() {
+            let rect = NSRect(
+                x: CGFloat(index) * (iconSize + spacing),
+                y: 1,
+                width: iconSize,
+                height: iconSize
+            )
+            icon.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1)
+        }
+        result.unlockFocus()
+        result.isTemplate = false
+        result.accessibilityDescription = providers.map(\.displayName).joined(separator: " / ")
+        return result
     }
 
     private var tooltipText: String {

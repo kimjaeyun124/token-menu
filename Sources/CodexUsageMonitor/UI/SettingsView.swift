@@ -165,7 +165,7 @@ struct SettingsView: View {
             }
             Section(l("section.format")) {
                 Picker(l("menu_bar.format"), selection: settingsStore.binding(\.menuBarFormat)) {
-                    ForEach(MenuBarFormat.allCases) { Text($0.title).tag($0) }
+                    ForEach(MenuBarFormat.allCases) { Text(localizedFormat($0)).tag($0) }
                 }
                 Picker(l("menu_bar.identification"), selection: settingsStore.binding(\.providerIdentification)) {
                     Text(l("option.none")).tag(ProviderIdentification.none)
@@ -499,6 +499,10 @@ struct SettingsView: View {
         }
     }
 
+    private func localizedFormat(_ format: MenuBarFormat) -> String {
+        format == .iconOnly ? l("option.icon_only") : format.title
+    }
+
     private func localizedUnavailable(_ value: UnavailableDisplay) -> String {
         switch value {
         case .dashes: return "--%"
@@ -512,6 +516,9 @@ struct SettingsView: View {
     }
 
     private var previewText: String {
+        if settingsStore.settings.menuBarFormat == .iconOnly {
+            return l("option.icon_only")
+        }
         let sample = AIUsage(
             provider: .codex,
             windows: [UsageWindow(type: .fiveHour, remainingPercent: 28, resetDate: nil)],
