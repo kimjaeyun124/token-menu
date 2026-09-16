@@ -322,6 +322,21 @@ final class CodexUsageTests: XCTestCase {
         XCTAssertEqual(paths.sessionsDirectories.map(\.path), ["/Users/example/.codex/sessions"])
     }
 
+    func testCodexActivityDiscoveryKeepsAdditionalSocketsWhenConfiguredSocketRespondsEmpty() {
+        let additional = CodexActivitySocketDiscovery.additionalSocketPaths(
+            discovered: [
+                "/Users/example/.codex/app-server-control/app-server-control.sock",
+                "/private/tmp/desktop-app-server.sock",
+                "/private/tmp/desktop-app-server.sock"
+            ],
+            configured: [
+                "/Users/example/.codex/app-server-control/app-server-control.sock"
+            ]
+        )
+
+        XCTAssertEqual(additional, ["/private/tmp/desktop-app-server.sock"])
+    }
+
     func testCodexParserSelectsCodexBucket() throws {
         let data = Data(#"""
         {"id":2,"result":{"rateLimits":{"primary":{"usedPercent":99,"windowDurationMins":300}},
