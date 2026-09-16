@@ -651,6 +651,7 @@ final class CodexUsageTests: XCTestCase {
         XCTAssertEqual(reloaded.settings.providerIconColor, .accent)
         XCTAssertNotNil(ProviderIconAsset.image(for: .codex, color: .white))
         XCTAssertNotNil(ProviderIconAsset.image(for: .claudeCode, color: .black))
+        XCTAssertTrue(ProviderIconColor.black.nsColor.isEqual(NSColor.black))
     }
 
     @MainActor
@@ -659,6 +660,7 @@ final class CodexUsageTests: XCTestCase {
         store.settings.language = .english
         XCTAssertEqual(store.localized("category.refresh"), "Usage Refresh")
         XCTAssertEqual(store.localized("display.icon_color"), "Icon Color")
+        XCTAssertEqual(store.localized("display.icon_color_note"), "Applies to provider icons and menu bar text.")
         XCTAssertEqual(store.localized("option.icon_only"), "Icon Only")
         XCTAssertEqual(store.localized("notifications.activity_completed"), "Codex Task Completion")
         XCTAssertEqual(store.localized("notifications.reset"), "Usage Limit Reset")
@@ -669,6 +671,7 @@ final class CodexUsageTests: XCTestCase {
         store.settings.language = .korean
         XCTAssertEqual(store.localized("category.refresh"), "사용량 확인")
         XCTAssertEqual(store.localized("option.icon_color_white"), "흰색")
+        XCTAssertEqual(store.localized("display.icon_color_note"), "AI 아이콘과 메뉴바 텍스트에 적용됩니다.")
         XCTAssertEqual(store.localized("option.icon_only"), "아이콘만")
     }
 
