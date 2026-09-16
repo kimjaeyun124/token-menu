@@ -309,6 +309,19 @@ final class CodexUsageTests: XCTestCase {
         XCTAssertEqual(paths, ["/private/tmp/codex-custom.sock", "/private/tmp/custom-app-server"])
     }
 
+    func testCodexActivityRuntimeDiscoveryDerivesSessionsDirectoryFromOpenRollout() {
+        let paths = CodexActivitySocketDiscovery.runtimePaths(in: """
+        p123
+        f11
+        n/private/tmp/custom-app-server
+        f12
+        n/Users/example/.codex/sessions/2026/09/16/rollout-active.jsonl
+        """)
+
+        XCTAssertEqual(paths.socketPaths, ["/private/tmp/custom-app-server"])
+        XCTAssertEqual(paths.sessionsDirectories.map(\.path), ["/Users/example/.codex/sessions"])
+    }
+
     func testCodexParserSelectsCodexBucket() throws {
         let data = Data(#"""
         {"id":2,"result":{"rateLimits":{"primary":{"usedPercent":99,"windowDurationMins":300}},
