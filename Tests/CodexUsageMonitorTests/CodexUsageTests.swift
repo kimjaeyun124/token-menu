@@ -572,6 +572,51 @@ final class CodexUsageTests: XCTestCase {
         XCTAssertEqual(SettingsStore(defaults: defaults).settings.menuBarFormat, .iconOnly)
     }
 
+    @MainActor
+    func testIconPercentageMenuBarFormatUsesProviderIconWithPercentageOnly() {
+        let store = makeStore()
+        store.settings.menuBarFormat = .iconPercentage
+        store.settings.showProviderName = true
+        store.settings.providerIdentification = .name
+        let usage = makeUsage(provider: .codex, fiveHour: 28, weekly: 84)
+
+        let value = MenuBarPresentation.resolve(usages: [.codex: usage], settings: store.settings)
+
+        XCTAssertEqual(MenuBarFormat.iconPercentage.title, "Icon | 28%")
+        XCTAssertEqual(value.text, "28%")
+        XCTAssertEqual(value.segments.map(\.text), ["28%"])
+        XCTAssertEqual(value.segments.map(\.provider), [.codex])
+    }
+
+    @MainActor
+    func testIconPercentageMenuBarFormatKeepsBothProviderIconsAndSeparatesPercentages() {
+        let store = makeStore()
+        store.settings.menuBarProvider = .both
+        store.settings.menuBarFormat = .iconPercentage
+        let codex = makeUsage(provider: .codex, fiveHour: 28, weekly: nil)
+        let claude = makeUsage(provider: .claudeCode, fiveHour: 71, weekly: nil)
+
+        let value = MenuBarPresentation.resolve(
+            usages: [.codex: codex, .claudeCode: claude],
+            settings: store.settings
+        )
+
+        XCTAssertEqual(value.text, "28% / 71%")
+        XCTAssertEqual(value.segments.map(\.provider), [.codex, .claudeCode])
+    }
+
+    @MainActor
+    func testIconPercentageMenuBarFormatPersistsAndLocalizes() {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let store = SettingsStore(defaults: defaults)
+        store.settings.menuBarFormat = .iconPercentage
+
+        XCTAssertEqual(SettingsStore(defaults: defaults).settings.menuBarFormat, .iconPercentage)
+        XCTAssertEqual(store.localized("option.icon_percentage"), "Icon | 28%")
+        store.settings.language = .korean
+        XCTAssertEqual(store.localized("option.icon_percentage"), "아이콘 | 28%")
+    }
+
     func testPercentageFormatterUsesWholeNumberRounding() {
         XCTAssertEqual(PercentageFormatter.string(for: 0), "0%")
         XCTAssertEqual(PercentageFormatter.string(for: 1), "1%")
